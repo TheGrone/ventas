@@ -29,6 +29,7 @@ export interface Product {
   description: string;
   price_clp: number;
   image_url: string | null;
+  images?: string[];
   is_available: boolean;
   is_hidden_by_admin: boolean;
   moderation_note: string | null;
@@ -43,6 +44,17 @@ export interface CondoSettings {
   condo_name: string;
   invite_code: string;
   updated_at: string;
+}
+
+export interface InviteCode {
+  id: string;
+  code: string;
+  label: string;
+  max_uses: number | null;
+  uses_count: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface ModerationLog {

@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import {
   BadgeCheck,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   EyeOff,
   MessageCircle,
@@ -24,15 +27,35 @@ export function ProductCard({
   onDelete,
   onToggleHidden,
 }: ProductCardProps) {
+  const [imgIndex, setImgIndex] = useState(0);
+
   const isOwner = product.seller_id === currentUser.id;
   const isAdmin = currentUser.role === 'admin';
   const sellerName = product.seller?.full_name || 'Vecino';
   const sellerUnit = product.seller?.unit_number || 'Torre / Depto';
   const sellerPhone = product.seller?.whatsapp || '';
-  const hasImage = product.image_url && isSafeImageUrl(product.image_url);
+
+  const gallery = (() => {
+    if (product.images && product.images.length > 0) {
+      return product.images.filter((u) => isSafeImageUrl(u));
+    }
+    if (product.image_url && isSafeImageUrl(product.image_url)) {
+      return [product.image_url];
+    }
+    return [];
+  })();
+
+  const safeIndex = gallery.length > 0 ? imgIndex % gallery.length : 0;
 
   const whatsappHref = sellerPhone
-    ? buildWhatsAppUrl(sellerPhone, product.title, product.price_clp, sellerName)
+    ? buildWhatsAppUrl(
+        sellerPhone,
+        product.title,
+        product.price_clp,
+        sellerName,
+        currentUser.full_name,
+        currentUser.unit_number
+      )
     : '#';
 
   return (
@@ -44,13 +67,40 @@ export function ProductCard({
       }`}
     >
       <div className="relative aspect-4/3 bg-emerald-100/80 dark:bg-slate-800 overflow-hidden">
-        {hasImage ? (
-          <img
-            src={product.image_url!}
-            alt={product.title}
-            loading="lazy"
-            className="w-full h-full object-cover"
-          />
+        {gallery.length > 0 ? (
+          <>
+            <img
+              src={gallery[safeIndex]}
+              alt={`${product.title} - foto ${safeIndex + 1}`}
+              loading="lazy"
+              className="w-full h-full object-cover"
+            />
+            {gallery.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImgIndex((prev) => (prev - 1 + gallery.length) % gallery.length)
+                  }
+                  aria-label="Foto anterior"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded-full bg-slate-900/60 hover:bg-slate-900/80 text-white transition"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImgIndex((prev) => (prev + 1) % gallery.length)}
+                  aria-label="Foto siguiente"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full bg-slate-900/60 hover:bg-slate-900/80 text-white transition"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-900/70 text-white">
+                  {safeIndex + 1}/{gallery.length}
+                </span>
+              </>
+            )}
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-emerald-700/50 dark:text-slate-500 text-sm">
             Sin imagen

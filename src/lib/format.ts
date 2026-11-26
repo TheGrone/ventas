@@ -29,16 +29,18 @@ export function isValidWhatsApp(raw: string): boolean {
 }
 
 /**
- * Genera el enlace seguro wa.me con mensaje prellenado para contactar al vendedor.
+ * Genera el enlace seguro wa.me con mensaje formal y amable indicando Torre y Depto del comprador.
  */
 export function buildWhatsAppUrl(
   rawPhone: string,
   productTitle: string,
   priceClp: number,
-  sellerName: string
+  sellerName: string,
+  buyerName: string,
+  buyerUnit: string
 ): string {
   const phone = normalizeWhatsApp(rawPhone);
-  const message = `Hola ${sellerName}, te escribo desde el Mercado del Condominio por tu anuncio: "${productTitle}" (${formatCLP(priceClp)}). ¿Sigue disponible?`;
+  const message = `Hola ${sellerName}, buenas. Soy ${buyerName} de ${buyerUnit} (del condominio) y me interesa tu anuncio: "${productTitle}" (${formatCLP(priceClp)}). ¿Sigue disponible? Muchas gracias.`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 

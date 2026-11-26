@@ -115,7 +115,31 @@ create trigger trg_protect_profile_fields
   for each row
   execute function public.protect_profile_fields();
 
--- 5. Trigger de registro: valida código de invitación en el servidor
+-- 5. Tabla de códigos de invitación (múltiples códigos creables/eliminables)
+create table if not exists public.invite_codes (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique check (char_length(trim(code)) between 3 and 40),
+  label text not null default '',
+  max_uses integer check (max_uses is null or max_uses > 0),
+  uses_count integer not null default 0,
+  is_active boolean not null default true,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.invite_codes enable row level security;
+
+create policy "Solo admin gestiona invite_codes"
+  on public.invite_codes for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+insert into public.invite_codes (code, label, max_uses, is_active)
+values ('CONDO2026', 'Código general inicial', null, true)
+on conflict (code) do nothing;
+
+-- 6. Trigger de registro: valida código de invitación en el servidor
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -125,15 +149,31 @@ as $$
 declare
   v_invite_code text;
   v_expected_code text;
+  v_code_row public.invite_codes%rowtype;
   v_full_name text;
   v_unit text;
   v_whatsapp text;
 begin
   v_invite_code := trim(coalesce(new.raw_user_meta_data->>'invite_code', ''));
-  select invite_code into v_expected_code from public.condo_settings where id = 1;
 
-  if v_expected_code is null or v_invite_code <> v_expected_code then
-    raise exception 'Código de invitación del condominio inválido.';
+  select * into v_code_row
+  from public.invite_codes
+  where upper(trim(code)) = upper(v_invite_code)
+    and is_active = true
+  limit 1;
+
+  if found then
+    if v_code_row.max_uses is not null and v_code_row.uses_count >= v_code_row.max_uses then
+      raise exception 'Este código de invitación ya alcanzó su límite de usos.';
+    end if;
+    update public.invite_codes
+    set uses_count = uses_count + 1
+    where id = v_code_row.id;
+  else
+    select invite_code into v_expected_code from public.condo_settings where id = 1;
+    if v_expected_code is null or upper(v_invite_code) <> upper(trim(v_expected_code)) then
+      raise exception 'Código de invitación del condominio inválido.';
+    end if;
   end if;
 
   v_full_name := trim(coalesce(new.raw_user_meta_data->>'full_name', ''));
@@ -144,7 +184,7 @@ begin
     raise exception 'Debes ingresar tu nombre completo.';
   end if;
   if char_length(v_unit) < 1 then
-    raise exception 'Debes ingresar tu número de casa o departamento.';
+    raise exception 'Debes ingresar tu torre y departamento.';
   end if;
   if v_whatsapp !~ '^\+?[0-9]{8,15}$' then
     raise exception 'Número de WhatsApp inválido. Ejemplo: +56912345678';
@@ -232,6 +272,7 @@ create table if not exists public.products (
   description text not null default '' check (char_length(description) <= 1000),
   price_clp integer not null check (price_clp >= 0 and price_clp <= 100000000),
   image_url text,
+  images text[] not null default '{}' check (coalesce(array_length(images, 1), 0) <= 6),
   is_available boolean not null default true,
   is_hidden_by_admin boolean not null default false,
   moderation_note text,

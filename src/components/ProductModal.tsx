@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { ImagePlus, X } from 'lucide-react';
+import { ImagePlus, Trash2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { isSafeImageUrl } from '../lib/format';
 import type { Category, Product } from '../types/database';
@@ -12,8 +12,20 @@ interface ProductModalProps {
   onSaved: () => Promise<void>;
 }
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_IMAGES = 6;
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB por imagen
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+function getInitialImages(product: Product | null): string[] {
+  if (!product) return [];
+  if (product.images && product.images.length > 0) {
+    return product.images.filter((u) => isSafeImageUrl(u)).slice(0, MAX_IMAGES);
+  }
+  if (product.image_url && isSafeImageUrl(product.image_url)) {
+    return [product.image_url];
+  }
+  return [];
+}
 
 export function ProductModal({
   categories,
@@ -31,40 +43,63 @@ export function ProductModal({
     editingProduct?.category_id ?? categories[0]?.id ?? ''
   );
   const [isAvailable, setIsAvailable] = useState(editingProduct?.is_available ?? true);
-  const [imageUrl, setImageUrl] = useState(editingProduct?.image_url ?? '');
+  const [images, setImages] = useState<string[]>(() =>
+    getInitialImages(editingProduct)
+  );
   const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFilesUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
     setError(null);
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setError('Solo se permiten imágenes JPG, PNG o WebP.');
+    const remainingSlots = MAX_IMAGES - images.length;
+    if (remainingSlots <= 0) {
+      setError(`Máximo ${MAX_IMAGES} imágenes por anuncio.`);
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError('La imagen no puede superar los 2 MB.');
-      return;
+
+    const selected = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      setError(
+        `Solo se subirán ${remainingSlots} imagen(es) para respetar el máximo de ${MAX_IMAGES}.`
+      );
+    }
+
+    for (const file of selected) {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        setError('Solo se permiten imágenes JPG, PNG o WebP.');
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setError('Cada imagen debe pesar como máximo 2 MB.');
+        return;
+      }
     }
 
     setUploadingImage(true);
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const filePath = `${sellerId}/${crypto.randomUUID()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, file, { upsert: false });
+      const uploadedUrls: string[] = [];
+      for (const file of selected) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const filePath = `${sellerId}/${crypto.randomUUID()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(filePath, file, { upsert: false });
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      const { data } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
+        const { data } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(filePath);
 
-      setImageUrl(data.publicUrl);
+        uploadedUrls.push(data.publicUrl);
+      }
+
+      setImages((prev) => [...prev, ...uploadedUrls].slice(0, MAX_IMAGES));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'No se pudo subir la imagen.'
@@ -72,6 +107,10 @@ export function ProductModal({
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setImages((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -88,13 +127,11 @@ export function ProductModal({
       return;
     }
     if (!categoryId) {
-      setError('Selecciona una categoría.');
+      setError('Selecciona una categoría (si no hay ninguna, crea una en Administración).');
       return;
     }
-    if (imageUrl && !isSafeImageUrl(imageUrl)) {
-      setError('La URL de la imagen debe comenzar con https://');
-      return;
-    }
+
+    const safeImages = images.filter((u) => isSafeImageUrl(u)).slice(0, MAX_IMAGES);
 
     setSaving(true);
     try {
@@ -104,7 +141,8 @@ export function ProductModal({
         title: title.trim(),
         description: description.trim(),
         price_clp: parsedPrice,
-        image_url: imageUrl.trim() || null,
+        image_url: safeImages[0] ?? null,
+        images: safeImages,
         is_available: isAvailable,
       };
 
@@ -196,11 +234,15 @@ export function ProductModal({
                 onChange={(e) => setCategoryId(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
+                {categories.length === 0 ? (
+                  <option value="">Sin categorías disponibles</option>
+                ) : (
+                  categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>
@@ -220,37 +262,50 @@ export function ProductModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-800 dark:text-slate-200 mb-1">
-              Foto del producto (opcional, máx 2 MB)
-            </label>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium text-slate-800 dark:text-slate-200">
+                Fotos del producto ({images.length}/{MAX_IMAGES}, máx 2 MB c/u)
+              </label>
+            </div>
+
+            {images.length < MAX_IMAGES && (
               <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-300 dark:border-slate-700 bg-emerald-100/60 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-slate-700 text-sm font-medium text-slate-800 dark:text-slate-200 cursor-pointer">
                 <ImagePlus className="w-4 h-4" />
-                {uploadingImage ? 'Subiendo...' : 'Subir foto'}
+                {uploadingImage ? 'Subiendo...' : 'Subir fotos (hasta 6)'}
                 <input
                   type="file"
+                  multiple
                   accept="image/jpeg,image/png,image/webp"
-                  onChange={handleFileUpload}
+                  onChange={handleFilesUpload}
                   disabled={uploadingImage}
                   className="hidden"
                 />
               </label>
-              {imageUrl && (
-                <button
-                  type="button"
-                  onClick={() => setImageUrl('')}
-                  className="text-xs text-red-600 dark:text-red-400 hover:underline"
-                >
-                  Quitar foto
-                </button>
-              )}
-            </div>
-            {imageUrl && isSafeImageUrl(imageUrl) && (
-              <img
-                src={imageUrl}
-                alt="Vista previa"
-                className="mt-2 h-28 w-40 object-cover rounded-xl border border-emerald-200 dark:border-slate-700"
-              />
+            )}
+
+            {images.length > 0 && (
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {images.map((url, idx) => (
+                  <div
+                    key={`${url}-${idx}`}
+                    className="relative group aspect-square rounded-xl overflow-hidden border border-emerald-200 dark:border-slate-700 bg-emerald-100/50 dark:bg-slate-800"
+                  >
+                    <img
+                      src={url}
+                      alt={`Foto ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      title="Quitar foto"
+                      className="absolute top-1 right-1 p-1 rounded-lg bg-red-600/90 hover:bg-red-700 text-white shadow-sm"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
