@@ -1,0 +1,56 @@
+export type UserRole = 'resident' | 'admin';
+export type AccountStatus = 'pending' | 'approved' | 'suspended';
+
+export interface Profile {
+  id: string;
+  email: string;
+  full_name: string;
+  unit_number: string;
+  whatsapp: string;
+  role: UserRole;
+  status: AccountStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface Product {
+  id: string;
+  seller_id: string;
+  category_id: string;
+  title: string;
+  description: string;
+  price_clp: number;
+  image_url: string | null;
+  is_available: boolean;
+  is_hidden_by_admin: boolean;
+  moderation_note: string | null;
+  created_at: string;
+  updated_at: string;
+  seller?: Pick<Profile, 'id' | 'full_name' | 'unit_number' | 'whatsapp'>;
+  category?: Pick<Category, 'id' | 'name' | 'icon'>;
+}
+
+export interface CondoSettings {
+  id: number;
+  condo_name: string;
+  invite_code: string;
+  updated_at: string;
+}
+
+export interface ModerationLog {
+  id: string;
+  admin_id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: string | null;
+  created_at: string;
+}
