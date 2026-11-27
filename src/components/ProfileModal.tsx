@@ -24,6 +24,9 @@ export function ProfileModal({
   onSaved,
 }: ProfileModalProps) {
   const initialUnit = parseUnitNumber(targetProfile.unit_number);
+  const isAdminAccount =
+    targetProfile.role === 'super_admin' ||
+    targetProfile.unit_number === 'Administración';
 
   const [fullName, setFullName] = useState(targetProfile.full_name);
   const [tower, setTower] = useState(initialUnit.tower);
@@ -39,7 +42,9 @@ export function ProfileModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const formattedUnit = `Torre ${tower} - Depto ${floor}0${apt}`;
+  const formattedUnit = isAdminAccount
+    ? 'Administración'
+    : `Torre ${tower} - Depto ${floor}0${apt}`;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -164,52 +169,54 @@ export function ProfileModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
-              Torre / Piso / Depto
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <select
-                value={tower}
-                onChange={(e) => setTower(Number(e.target.value))}
-                aria-label="Torre"
-                className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                {TOWERS.map((t) => (
-                  <option key={t} value={t}>
-                    Torre {t}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={floor}
-                onChange={(e) => setFloor(Number(e.target.value))}
-                aria-label="Piso"
-                className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                {FLOORS.map((f) => (
-                  <option key={f} value={f}>
-                    Piso {f}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={apt}
-                onChange={(e) => setApt(Number(e.target.value))}
-                aria-label="Departamento"
-                className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                {APTS.map((a) => (
-                  <option key={a} value={a}>
-                    Depto {floor}0{a}
-                  </option>
-                ))}
-              </select>
+          {!isAdminAccount && (
+            <div>
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                Torre / Piso / Depto
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={tower}
+                  onChange={(e) => setTower(Number(e.target.value))}
+                  aria-label="Torre"
+                  className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {TOWERS.map((t) => (
+                    <option key={t} value={t}>
+                      Torre {t}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={floor}
+                  onChange={(e) => setFloor(Number(e.target.value))}
+                  aria-label="Piso"
+                  className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {FLOORS.map((f) => (
+                    <option key={f} value={f}>
+                      Piso {f}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={apt}
+                  onChange={(e) => setApt(Number(e.target.value))}
+                  aria-label="Departamento"
+                  className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {APTS.map((a) => (
+                    <option key={a} value={a}>
+                      Depto {floor}0{a}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-xs text-emerald-800 dark:text-emerald-400 mt-1">
+                Ubicación seleccionada: <strong>{formattedUnit}</strong>
+              </p>
             </div>
-            <p className="text-xs text-emerald-800 dark:text-emerald-400 mt-1">
-              Ubicación seleccionada: <strong>{formattedUnit}</strong>
-            </p>
-          </div>
+          )}
 
           <div>
             <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { buildAdminApprovalWhatsAppUrl } from '../lib/format';
 import { supabase } from '../lib/supabase';
-import type { Profile } from '../types/database';
+import type { Profile, SupportContact } from '../types/database';
 import type { Theme } from '../hooks/useTheme';
 import { ProfileModal } from './ProfileModal';
 
@@ -31,15 +31,22 @@ export function PendingApprovalScreen({
   onSignOut,
 }: PendingApprovalScreenProps) {
   const isSuspended = profile.status === 'suspended';
-  const [adminWhatsapp, setAdminWhatsapp] = useState<string>('');
+  const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
   const [checking, setChecking] = useState(false);
   const [editingSelf, setEditingSelf] = useState(false);
 
   useEffect(() => {
     let active = true;
-    supabase.rpc('get_admin_whatsapp').then(({ data }) => {
-      if (active && typeof data === 'string') {
-        setAdminWhatsapp(data);
+    supabase.rpc('get_support_contacts').then(async ({ data, error }) => {
+      if (!active) return;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        setSupportContacts(data as SupportContact[]);
+        return;
+      }
+      // Respaldo si aún no se ejecuta get_support_contacts()
+      const { data: singlePhone } = await supabase.rpc('get_admin_whatsapp');
+      if (active && typeof singlePhone === 'string' && singlePhone.trim()) {
+        setSupportContacts([{ label: 'Administrador', whatsapp: singlePhone }]);
       }
     });
     return () => {
@@ -52,15 +59,6 @@ export function PendingApprovalScreen({
     await onRefresh();
     setChecking(false);
   };
-
-  const adminWaUrl = adminWhatsapp
-    ? buildAdminApprovalWhatsAppUrl(
-        adminWhatsapp,
-        profile.full_name,
-        profile.unit_number,
-        profile.whatsapp
-      )
-    : '';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-emerald-100 dark:bg-slate-950 px-4 py-8 relative">
@@ -105,24 +103,34 @@ export function PendingApprovalScreen({
 
         <p className="text-base text-slate-700 dark:text-slate-300 mt-3 leading-relaxed">
           {isSuspended
-            ? 'Tu acceso al mercado del condominio fue suspendido temporalmente. Si crees que es un error, escríbele al administrador.'
-            : `Hola ${profile.full_name} (${profile.unit_number}). Para cuidar la seguridad de todos los vecinos, el administrador debe aprobar tu ingreso.`}
+            ? 'Tu acceso al mercado del condominio fue suspendido temporalmente. Si crees que es un error, escríbele a soporte.'
+            : `Hola ${profile.full_name} (${profile.unit_number}). Para cuidar la seguridad de todos los vecinos, la administración debe aprobar tu ingreso.`}
         </p>
 
-        {!isSuspended && adminWaUrl && (
-          <div className="mt-5 p-4 rounded-2xl bg-emerald-100/90 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800">
-            <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-200 mb-3">
-              Presiona el botón verde para avisarle al Administrador por WhatsApp que ya te registraste:
+        {supportContacts.length > 0 && (
+          <div className="mt-5 p-4 rounded-2xl bg-emerald-100/90 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 space-y-2.5">
+            <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-200">
+              {isSuspended
+                ? 'Contacta a soporte por WhatsApp:'
+                : 'Presiona un botón verde para avisar por WhatsApp que ya te registraste:'}
             </p>
-            <a
-              href={adminWaUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold shadow-md transition"
-            >
-              <MessageCircle className="w-5 h-5 shrink-0" />
-              <span>Avisar al Admin por WhatsApp</span>
-            </a>
+            {supportContacts.map((c, idx) => (
+              <a
+                key={`${c.whatsapp}-${idx}`}
+                href={buildAdminApprovalWhatsAppUrl(
+                  c.whatsapp,
+                  profile.full_name,
+                  profile.unit_number,
+                  profile.whatsapp
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold shadow-md transition"
+              >
+                <MessageCircle className="w-5 h-5 shrink-0" />
+                <span>Avisar a {c.label || `Soporte ${idx + 1}`}</span>
+              </a>
+            ))}
           </div>
         )}
 

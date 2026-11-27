@@ -12,6 +12,7 @@ create table if not exists public.condo_settings (
   condo_name text not null default 'Mi Condominio',
   invite_code text not null default 'CONDO2026',
   admin_whatsapp text not null default '',
+  support_contacts jsonb not null default '[]'::jsonb,
   open_access_until timestamptz,
   updated_at timestamptz not null default now()
 );
@@ -102,8 +103,8 @@ security definer
 set search_path = public
 as $$
 begin
-  -- Permitir cambios directos desde SQL Editor / service_role (auth.uid() is null)
-  if auth.uid() is null then
+  -- Permitir cambios directos desde SQL Editor / service_role
+  if current_user in ('postgres', 'supabase_admin', 'service_role') or auth.uid() is null then
     new.updated_at := now();
     return new;
   end if;
@@ -185,6 +186,25 @@ declare
   v_whatsapp text;
 begin
   v_invite_code := trim(coalesce(new.raw_user_meta_data->>'invite_code', ''));
+
+  -- Cuenta dedicada de Super Admin creada desde el panel de Supabase (sin Torre/Depto)
+  if lower(trim(coalesce(new.email, ''))) = 'admin@condominio.cl' then
+    insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status)
+    values (
+      new.id,
+      coalesce(new.email, 'admin@condominio.cl'),
+      coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), 'Administración'),
+      'Administración',
+      coalesce(nullif(trim(new.raw_user_meta_data->>'whatsapp'), ''), '+56900000000'),
+      'super_admin',
+      'approved'
+    )
+    on conflict (id) do update
+      set role = 'super_admin',
+          status = 'approved',
+          unit_number = 'Administración';
+    return new;
+  end if;
 
   select invite_code, open_access_until
   into v_expected_code, v_open_until
@@ -489,6 +509,42 @@ end;
 $$;
 
 grant execute on function public.get_admin_whatsapp() to authenticated;
+
+create or replace function public.get_support_contacts()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_contacts jsonb;
+  v_fallback text;
+begin
+  if auth.uid() is null then
+    return '[]'::jsonb;
+  end if;
+
+  select support_contacts into v_contacts
+  from public.condo_settings
+  where id = 1;
+
+  if v_contacts is not null and jsonb_typeof(v_contacts) = 'array' and jsonb_array_length(v_contacts) > 0 then
+    return v_contacts;
+  end if;
+
+  v_fallback := public.get_admin_whatsapp();
+  if v_fallback <> '' then
+    return jsonb_build_array(
+      jsonb_build_object('label', 'Administración', 'whatsapp', v_fallback)
+    );
+  end if;
+
+  return '[]'::jsonb;
+end;
+$$;
+
+grant execute on function public.get_support_contacts() to authenticated;
 
 create or replace function public.admin_delete_user(target_user_id uuid)
 returns void

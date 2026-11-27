@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  HelpCircle,
   LogOut,
   Moon,
   Package,
@@ -21,6 +22,7 @@ import { ProductModal } from './components/ProductModal';
 import { ProfileModal } from './components/ProfileModal';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { SetupGuideBanner } from './components/SetupGuideBanner';
+import { SupportModal } from './components/SupportModal';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
 import { CONDO_NAME, isSupabaseConfigured, supabase } from './lib/supabase';
@@ -55,6 +57,7 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [supportModalOpen, setSupportModalOpen] = useState(false);
 
   const loadMarketData = useCallback(async () => {
     if (!profile || profile.status !== 'approved') return;
@@ -254,6 +257,16 @@ export default function App() {
             >
               <PlusCircle className="w-5 h-5" />
               <span>Vender</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSupportModalOpen(true)}
+              title="Ayuda y soporte del condominio"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-2xl border border-emerald-300 dark:border-slate-700 bg-emerald-100/70 dark:bg-slate-800 hover:bg-emerald-200/70 dark:hover:bg-slate-700 text-emerald-900 dark:text-emerald-300 text-xs sm:text-sm font-bold transition"
+            >
+              <HelpCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">Ayuda</span>
             </button>
 
             <button
@@ -474,6 +487,13 @@ export default function App() {
             await refreshProfile();
             await loadMarketData();
           }}
+        />
+      )}
+
+      {supportModalOpen && (
+        <SupportModal
+          currentUser={profile}
+          onClose={() => setSupportModalOpen(false)}
         />
       )}
     </div>

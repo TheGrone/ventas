@@ -39,11 +39,17 @@ export interface Product {
   category?: Pick<Category, 'id' | 'name' | 'icon'>;
 }
 
+export interface SupportContact {
+  label: string;
+  whatsapp: string;
+}
+
 export interface CondoSettings {
   id: number;
   condo_name: string;
   invite_code: string;
   admin_whatsapp?: string;
+  support_contacts?: SupportContact[];
   open_access_until?: string | null;
   updated_at: string;
 }

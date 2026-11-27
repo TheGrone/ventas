@@ -6,9 +6,10 @@
 --   3. Número de WhatsApp del Admin para que los nuevos vecinos avisen al registrarse
 -- ============================================================================
 
--- 1. Asegurar columnas admin_whatsapp y open_access_until en condo_settings
+-- 1. Asegurar columnas admin_whatsapp, support_contacts y open_access_until en condo_settings
 alter table public.condo_settings
   add column if not exists admin_whatsapp text not null default '',
+  add column if not exists support_contacts jsonb not null default '[]'::jsonb,
   add column if not exists open_access_until timestamptz;
 
 -- 1b. Actualizar trigger handle_new_user() para soportar "Acceso Libre por el día"
@@ -29,6 +30,25 @@ declare
   v_whatsapp text;
 begin
   v_invite_code := trim(coalesce(new.raw_user_meta_data->>'invite_code', ''));
+
+  -- Cuenta dedicada de Super Admin creada desde el panel de Supabase (sin Torre/Depto ni código)
+  if lower(trim(coalesce(new.email, ''))) = 'admin@condominio.cl' then
+    insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status)
+    values (
+      new.id,
+      coalesce(new.email, 'admin@condominio.cl'),
+      coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), 'Administración'),
+      'Administración',
+      coalesce(nullif(trim(new.raw_user_meta_data->>'whatsapp'), ''), '+56977262607'),
+      'super_admin',
+      'approved'
+    )
+    on conflict (id) do update
+      set role = 'super_admin',
+          status = 'approved',
+          unit_number = 'Administración';
+    return new;
+  end if;
 
   select invite_code, open_access_until
   into v_expected_code, v_open_until
@@ -128,6 +148,42 @@ grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_approved_resident() to authenticated;
 grant execute on function public.get_admin_whatsapp() to authenticated;
 
+create or replace function public.get_support_contacts()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_contacts jsonb;
+  v_fallback text;
+begin
+  if auth.uid() is null then
+    return '[]'::jsonb;
+  end if;
+
+  select support_contacts into v_contacts
+  from public.condo_settings
+  where id = 1;
+
+  if v_contacts is not null and jsonb_typeof(v_contacts) = 'array' and jsonb_array_length(v_contacts) > 0 then
+    return v_contacts;
+  end if;
+
+  v_fallback := public.get_admin_whatsapp();
+  if v_fallback <> '' then
+    return jsonb_build_array(
+      jsonb_build_object('label', 'Administración', 'whatsapp', v_fallback)
+    );
+  end if;
+
+  return '[]'::jsonb;
+end;
+$$;
+
+grant execute on function public.get_support_contacts() to authenticated;
+
 -- 4. Permitir rol 'super_admin' y blindar edición de datos personales de terceros
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles
@@ -173,7 +229,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.uid() is null then
+  if current_user in ('postgres', 'supabase_admin', 'service_role') or auth.uid() is null then
     new.updated_at := now();
     return new;
   end if;

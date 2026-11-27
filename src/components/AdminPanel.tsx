@@ -24,6 +24,7 @@ import type {
   CondoSettings,
   InviteCode,
   Profile,
+  SupportContact,
   UserRole,
 } from '../types/database';
 import { ProfileModal } from './ProfileModal';
@@ -44,7 +45,9 @@ export function AdminPanel({
   const isSuperAdmin = adminRole === 'super_admin';
   const [users, setUsers] = useState<Profile[]>([]);
   const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
-  const [adminWhatsapp, setAdminWhatsapp] = useState('');
+  const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
+  const [newContactLabel, setNewContactLabel] = useState('');
+  const [newContactWhatsapp, setNewContactWhatsapp] = useState('+569');
   const [openAccessUntil, setOpenAccessUntil] = useState<string | null>(null);
   const [newCode, setNewCode] = useState('');
   const [newCodeLabel, setNewCodeLabel] = useState('');
@@ -91,7 +94,15 @@ export function AdminPanel({
 
     if (settingsData) {
       const s = settingsData as CondoSettings;
-      setAdminWhatsapp(s.admin_whatsapp ?? '');
+      if (Array.isArray(s.support_contacts) && s.support_contacts.length > 0) {
+        setSupportContacts(s.support_contacts);
+      } else if (s.admin_whatsapp) {
+        setSupportContacts([
+          { label: 'Administración principal', whatsapp: s.admin_whatsapp },
+        ]);
+      } else {
+        setSupportContacts([]);
+      }
       setOpenAccessUntil(s.open_access_until ?? null);
     }
 
@@ -170,30 +181,59 @@ export function AdminPanel({
     await Promise.all([loadAdminData(), onDataChanged()]);
   };
 
-  const handleSaveAdminWhatsapp = async (e: FormEvent) => {
+  const persistSupportContacts = async (nextContacts: SupportContact[]) => {
+    const primaryPhone = nextContacts[0]?.whatsapp ?? '';
+    const { error } = await supabase
+      .from('condo_settings')
+      .update({
+        support_contacts: nextContacts,
+        admin_whatsapp: primaryPhone,
+      })
+      .eq('id', 1);
+
+    if (error) {
+      setErrorMsg(
+        `No se pudieron guardar los contactos de soporte (${error.message}). Ejecuta supabase/fix_permissions.sql en Supabase.`
+      );
+      return false;
+    }
+
+    setSupportContacts(nextContacts);
+    return true;
+  };
+
+  const handleAddSupportContact = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setFeedback(null);
 
-    const trimmed = adminWhatsapp.trim();
-    if (trimmed && !isValidWhatsApp(trimmed)) {
+    const label = newContactLabel.trim() || `Soporte ${supportContacts.length + 1}`;
+    if (!isValidWhatsApp(newContactWhatsapp)) {
       setErrorMsg('Ingresa un número de WhatsApp válido (ej: +56912345678).');
       return;
     }
 
-    const formatted = trimmed ? `+${normalizeWhatsApp(trimmed)}` : '';
-    const { error } = await supabase
-      .from('condo_settings')
-      .update({ admin_whatsapp: formatted })
-      .eq('id', 1);
+    const formattedPhone = `+${normalizeWhatsApp(newContactWhatsapp)}`;
+    const nextContacts = [
+      ...supportContacts,
+      { label, whatsapp: formattedPhone },
+    ];
 
-    if (error) {
-      setErrorMsg(`No se pudo guardar el WhatsApp del administrador: ${error.message}`);
-      return;
+    if (await persistSupportContacts(nextContacts)) {
+      setNewContactLabel('');
+      setNewContactWhatsapp('+569');
+      setFeedback(`Contacto "${label}" agregado al soporte.`);
     }
+  };
 
-    setAdminWhatsapp(formatted);
-    setFeedback('WhatsApp del administrador guardado. Los nuevos vecinos te avisarán ahí.');
+  const handleRemoveSupportContact = async (index: number) => {
+    setErrorMsg(null);
+    setFeedback(null);
+    const removed = supportContacts[index];
+    const nextContacts = supportContacts.filter((_, idx) => idx !== index);
+    if (await persistSupportContacts(nextContacts)) {
+      setFeedback(`Contacto "${removed?.label ?? 'Soporte'}" eliminado.`);
+    }
   };
 
   const isOpenAccessActive = Boolean(
@@ -600,37 +640,81 @@ export function AdminPanel({
         )}
       </section>
 
-      {/* WhatsApp de avisos del Administrador */}
+      {/* Múltiples números de WhatsApp de Soporte */}
       <section className="bg-emerald-50/95 dark:bg-slate-900 rounded-3xl border-2 border-emerald-200 dark:border-slate-800 p-4 sm:p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-2">
           <Phone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            WhatsApp para recibir solicitudes de autorización
+            Números de WhatsApp de Soporte y Administración ({supportContacts.length})
           </h2>
         </div>
         <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-3">
-          Cuando un vecino se registre, le aparecerá un botón grande para avisarte por
-          WhatsApp con su Nombre y Torre/Depto. Si lo dejas vacío, usará tu propio número
-          registrado.
+          Agrega uno o varios números de soporte (ej: Administración 1, Soporte 2,
+          Conserjería). Aparecerán en el botón <strong>Ayuda</strong> y al registrarse
+          nuevos vecinos.
         </p>
+
         <form
-          onSubmit={handleSaveAdminWhatsapp}
-          className="flex flex-col sm:flex-row gap-2"
+          onSubmit={handleAddSupportContact}
+          className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4"
         >
           <input
+            type="text"
+            value={newContactLabel}
+            onChange={(e) => setNewContactLabel(e.target.value)}
+            placeholder="Nombre / Rol (ej: Soporte 1)"
+            className="px-3.5 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+          <input
             type="tel"
-            value={adminWhatsapp}
-            onChange={(e) => setAdminWhatsapp(e.target.value)}
-            placeholder="Ej: +56912345678"
-            className="flex-1 px-3.5 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            required
+            value={newContactWhatsapp}
+            onChange={(e) => setNewContactWhatsapp(e.target.value)}
+            placeholder="+56912345678"
+            className="px-3.5 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
           <button
             type="submit"
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold"
           >
-            Guardar número
+            <Plus className="w-4 h-4" />
+            Agregar soporte
           </button>
         </form>
+
+        {supportContacts.length === 0 ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            No hay números de soporte agregados todavía (se usará el WhatsApp de la cuenta
+            Super Admin como respaldo).
+          </p>
+        ) : (
+          <div className="divide-y divide-emerald-200/70 dark:divide-slate-800">
+            {supportContacts.map((c, idx) => (
+              <div
+                key={`${c.whatsapp}-${idx}`}
+                className="py-2.5 flex items-center justify-between gap-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {c.label}
+                  </span>
+                  <span className="ml-2 text-xs sm:text-sm text-emerald-800 dark:text-emerald-400">
+                    {c.whatsapp}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveSupportContact(idx)}
+                  title="Eliminar contacto"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-600 dark:text-red-400 text-xs font-bold shrink-0"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Quitar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Códigos de invitación y Secciones */}

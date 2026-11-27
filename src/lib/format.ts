@@ -59,6 +59,20 @@ export function buildAdminApprovalWhatsAppUrl(
 }
 
 /**
+ * Genera el enlace wa.me para pedir ayuda o soporte a un contacto de administración.
+ */
+export function buildSupportWhatsAppUrl(
+  supportPhone: string,
+  supportLabel: string,
+  residentName: string,
+  residentUnit: string
+): string {
+  const phone = normalizeWhatsApp(supportPhone);
+  const message = `Hola ${supportLabel}, buenas. Soy ${residentName} de ${residentUnit} y necesito ayuda con el Mercado del Condominio. Muchas gracias.`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+/**
  * Valida que una URL de imagen sea HTTPS segura (previene javascript: o data: maliciosos).
  */
 export function isSafeImageUrl(url: string | null | undefined): boolean {
