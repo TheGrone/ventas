@@ -32,6 +32,7 @@ create table if not exists public.profiles (
   whatsapp text not null check (whatsapp ~ '^\+?[0-9]{8,15}$'),
   role text not null default 'resident' check (role in ('resident', 'admin', 'super_admin')),
   status text not null default 'pending' check (status in ('pending', 'approved', 'suspended')),
+  terms_accepted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -244,6 +245,10 @@ begin
     raise exception 'Número de WhatsApp inválido. Ejemplo: +56912345678';
   end if;
 
+  if coalesce(new.raw_user_meta_data->>'terms_accepted', 'false') <> 'true' then
+    raise exception 'Debes aceptar el consentimiento de privacidad y normas del condominio para registrarte.';
+  end if;
+
   -- Si el Admin activó "Acceso Libre", aprueba automáticamente; si no, queda pending
   if v_open_until is not null and v_open_until > now() then
     v_initial_status := 'approved';
@@ -251,8 +256,8 @@ begin
     v_initial_status := 'pending';
   end if;
 
-  insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status)
-  values (new.id, coalesce(new.email, ''), v_full_name, v_unit, v_whatsapp, 'resident', v_initial_status);
+  insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status, terms_accepted_at)
+  values (new.id, coalesce(new.email, ''), v_full_name, v_unit, v_whatsapp, 'resident', v_initial_status, now());
 
   return new;
 end;
@@ -384,7 +389,11 @@ create policy "Vecino aprobado crea sus propios anuncios"
 create policy "Vendedor edita sus propios anuncios"
   on public.products for update
   to authenticated
-  using (public.is_approved_resident() and seller_id = auth.uid())
+  using (
+    public.is_approved_resident()
+    and seller_id = auth.uid()
+    and is_hidden_by_admin = false
+  )
   with check (
     public.is_approved_resident()
     and seller_id = auth.uid()
@@ -576,6 +585,50 @@ end;
 $$;
 
 grant execute on function public.admin_delete_user(uuid) to authenticated;
+
+-- Registrar consentimiento de privacidad y normas (Ley 19.628 / 21.719)
+create or replace function public.accept_terms()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión.';
+  end if;
+  update public.profiles
+  set terms_accepted_at = now()
+  where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.accept_terms() to authenticated;
+
+-- Derecho de cancelación/supresión (ARCO): cualquier vecino puede eliminar su propia cuenta y datos
+create or replace function public.delete_own_account()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_role text;
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión.';
+  end if;
+
+  select role into v_role from public.profiles where id = auth.uid();
+  if v_role = 'super_admin' then
+    raise exception 'La cuenta Super Admin no puede eliminarse desde aquí.';
+  end if;
+
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.delete_own_account() to authenticated;
 
 -- ============================================================================
 -- PASO FINAL OBLIGATORIO (ejecutar después de crear tu primera cuenta):

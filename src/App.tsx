@@ -16,6 +16,7 @@ import {
 import { AdminPanel } from './components/AdminPanel';
 import { AuthScreen } from './components/AuthScreen';
 import { CategoryCarousel } from './components/CategoryCarousel';
+import { ConsentModal } from './components/ConsentModal';
 import { PendingApprovalScreen } from './components/PendingApprovalScreen';
 import { ProductCard } from './components/ProductCard';
 import { ProductModal } from './components/ProductModal';
@@ -26,7 +27,7 @@ import { SupportModal } from './components/SupportModal';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
 import { CONDO_NAME, isSupabaseConfigured, supabase } from './lib/supabase';
-import type { Category, Product } from './types/database';
+import type { Category, Product, SupportContact } from './types/database';
 
 type ActiveTab = 'catalog' | 'mine' | 'admin';
 
@@ -58,6 +59,8 @@ export default function App() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [primarySupportPhone, setPrimarySupportPhone] = useState('');
 
   const loadMarketData = useCallback(async () => {
     if (!profile || profile.status !== 'approved') return;
@@ -79,6 +82,12 @@ export default function App() {
 
     if (cats) setCategories(cats as Category[]);
     if (prods) setProducts(prods as Product[]);
+
+    const { data: supportData } = await supabase.rpc('get_support_contacts');
+    if (Array.isArray(supportData) && supportData.length > 0) {
+      const first = supportData[0] as SupportContact;
+      setPrimarySupportPhone(first.whatsapp || '');
+    }
 
     if (profile.role === 'admin' || profile.role === 'super_admin') {
       const { count } = await supabase
@@ -215,6 +224,21 @@ export default function App() {
         onToggleTheme={toggleTheme}
         onRefresh={refreshProfile}
         onSignOut={signOut}
+      />
+    );
+  }
+
+  // Si la columna terms_accepted_at existe y es null, solicitar consentimiento explícito una sola vez
+  if (profile.terms_accepted_at === null) {
+    return (
+      <ConsentModal
+        mode="mandatory"
+        onAccept={async () => {
+          const { error } = await supabase.rpc('accept_terms');
+          if (error) throw error;
+          await refreshProfile();
+        }}
+        onDecline={signOut}
       />
     );
   }
@@ -439,6 +463,7 @@ export default function App() {
                     key={product.id}
                     product={product}
                     currentUser={profile}
+                    supportPhone={primarySupportPhone}
                     onEdit={(p) => {
                       setEditingProduct(p);
                       setModalOpen(true);
@@ -452,6 +477,22 @@ export default function App() {
           </>
         )}
       </main>
+
+      <footer className="border-t border-emerald-200 dark:border-slate-800 bg-emerald-50/80 dark:bg-slate-900/80 py-4 px-4 text-center text-xs text-slate-600 dark:text-slate-400">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>
+            {CONDO_NAME} · Tablero vecinal gratuito (sin intermediación de pagos ni
+            entregas).
+          </span>
+          <button
+            type="button"
+            onClick={() => setLegalModalOpen(true)}
+            className="font-bold text-emerald-800 dark:text-emerald-400 hover:underline"
+          >
+            Consentimiento, Privacidad y Normas
+          </button>
+        </div>
+      </footer>
 
       {modalOpen && (
         <ProductModal
@@ -495,6 +536,10 @@ export default function App() {
           currentUser={profile}
           onClose={() => setSupportModalOpen(false)}
         />
+      )}
+
+      {legalModalOpen && (
+        <ConsentModal mode="read" onClose={() => setLegalModalOpen(false)} />
       )}
     </div>
   );

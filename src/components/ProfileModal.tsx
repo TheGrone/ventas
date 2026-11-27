@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { CheckCircle2, Lock, Phone, User, X } from 'lucide-react';
+import { CheckCircle2, Lock, Phone, Trash2, User, X } from 'lucide-react';
 import { isValidWhatsApp, normalizeWhatsApp, parseUnitNumber } from '../lib/format';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types/database';
@@ -39,8 +39,32 @@ export function ProfileModal({
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [deletingOwn, setDeletingOwn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const handleDeleteOwnAccount = async () => {
+    setError(null);
+    const first = window.confirm(
+      '¿Seguro que quieres eliminar tu cuenta y todos tus anuncios? Esta acción borra todos tus datos de forma permanente.'
+    );
+    if (!first) return;
+
+    setDeletingOwn(true);
+    try {
+      const { error: delErr } = await supabase.rpc('delete_own_account');
+      if (delErr) throw delErr;
+      await supabase.auth.signOut();
+      onClose();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo eliminar tu cuenta. Contacta a soporte.'
+      );
+      setDeletingOwn(false);
+    }
+  };
 
   const formattedUnit = isAdminAccount
     ? 'Administración'
@@ -283,6 +307,24 @@ export function ProfileModal({
               {saving ? 'Guardando...' : 'Guardar cambios'}
             </button>
           </div>
+
+          {mode === 'self' && targetProfile.role !== 'super_admin' && (
+            <div className="pt-4 mt-2 border-t border-emerald-200 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={deletingOwn}
+                onClick={() => void handleDeleteOwnAccount()}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-700 dark:text-red-300 text-xs sm:text-sm font-bold transition"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>
+                  {deletingOwn
+                    ? 'Eliminando cuenta...'
+                    : 'Revocar consentimiento y eliminar mi cuenta'}
+                </span>
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

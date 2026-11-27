@@ -10,6 +10,7 @@ interface SignUpParams {
   unitNumber: string;
   whatsapp: string;
   inviteCode: string;
+  termsAccepted: boolean;
 }
 
 export function useAuth() {
@@ -117,6 +118,7 @@ export function useAuth() {
     unitNumber,
     whatsapp,
     inviteCode,
+    termsAccepted,
   }: SignUpParams) => {
     const { error } = await supabase.auth.signUp({
       email,
@@ -127,6 +129,7 @@ export function useAuth() {
           unit_number: unitNumber.trim(),
           whatsapp: whatsapp.trim(),
           invite_code: inviteCode.trim(),
+          terms_accepted: termsAccepted ? 'true' : 'false',
         },
       },
     });

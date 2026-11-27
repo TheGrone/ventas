@@ -73,6 +73,22 @@ export function buildSupportWhatsAppUrl(
 }
 
 /**
+ * Genera enlace wa.me para reportar un anuncio inapropiado o ilegal a la administración.
+ */
+export function buildReportProductWhatsAppUrl(
+  supportPhone: string,
+  productTitle: string,
+  sellerName: string,
+  sellerUnit: string,
+  reporterName: string,
+  reporterUnit: string
+): string {
+  const phone = normalizeWhatsApp(supportPhone);
+  const message = `Hola Administración, soy ${reporterName} (${reporterUnit}). Quisiera reportar el anuncio "${productTitle}" publicado por ${sellerName} (${sellerUnit}) porque podría incumplir las normas del condominio.`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+/**
  * Valida que una URL de imagen sea HTTPS segura (previene javascript: o data: maliciosos).
  */
 export function isSafeImageUrl(url: string | null | undefined): boolean {

@@ -5,16 +5,23 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Flag,
   MessageCircle,
   Pencil,
   Trash2,
 } from 'lucide-react';
-import { buildWhatsAppUrl, formatCLP, isSafeImageUrl } from '../lib/format';
+import {
+  buildReportProductWhatsAppUrl,
+  buildWhatsAppUrl,
+  formatCLP,
+  isSafeImageUrl,
+} from '../lib/format';
 import type { Product, Profile } from '../types/database';
 
 interface ProductCardProps {
   product: Product;
   currentUser: Profile;
+  supportPhone?: string;
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
   onToggleHidden?: (product: Product) => void;
@@ -23,6 +30,7 @@ interface ProductCardProps {
 export function ProductCard({
   product,
   currentUser,
+  supportPhone,
   onEdit,
   onDelete,
   onToggleHidden,
@@ -171,6 +179,25 @@ export function ProductCard({
               >
                 <MessageCircle className="w-5 h-5 shrink-0" />
                 <span>Escribir por WhatsApp</span>
+              </a>
+            )}
+
+            {!isOwner && !isAdmin && supportPhone && (
+              <a
+                href={buildReportProductWhatsAppUrl(
+                  supportPhone,
+                  product.title,
+                  sellerName,
+                  sellerUnit,
+                  currentUser.full_name,
+                  currentUser.unit_number
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                <span>Reportar anuncio inapropiado</span>
               </a>
             )}
 

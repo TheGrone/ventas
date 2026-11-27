@@ -1,16 +1,15 @@
 -- ============================================================================
--- FIX PERMISSIONS, ADMIN ACCESS & ADMIN WHATSAPP (Ejecuta en Supabase SQL Editor)
--- Soluciona:
---   1. "permission denied for table categories / invite_codes"
---   2. Acceso total de Administrador SOLO para pulgarmatias8@gmail.com
---   3. Número de WhatsApp del Admin para que los nuevos vecinos avisen al registrarse
+-- FIX PERMISSIONS, CONSENTIMIENTO, ROLES Y SOPORTE (Ejecuta en Supabase SQL Editor)
 -- ============================================================================
 
--- 1. Asegurar columnas admin_whatsapp, support_contacts y open_access_until en condo_settings
+-- 1. Asegurar columnas en condo_settings y profiles
 alter table public.condo_settings
   add column if not exists admin_whatsapp text not null default '',
   add column if not exists support_contacts jsonb not null default '[]'::jsonb,
   add column if not exists open_access_until timestamptz;
+
+alter table public.profiles
+  add column if not exists terms_accepted_at timestamptz;
 
 -- 1b. Actualizar trigger handle_new_user() para soportar "Acceso Libre por el día"
 create or replace function public.handle_new_user()
@@ -33,20 +32,22 @@ begin
 
   -- Cuenta dedicada de Super Admin creada desde el panel de Supabase (sin Torre/Depto ni código)
   if lower(trim(coalesce(new.email, ''))) = 'admin@condominio.cl' then
-    insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status)
+    insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status, terms_accepted_at)
     values (
       new.id,
       coalesce(new.email, 'admin@condominio.cl'),
       coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), 'Administración'),
       'Administración',
-      coalesce(nullif(trim(new.raw_user_meta_data->>'whatsapp'), ''), '+56977262607'),
+      coalesce(nullif(trim(new.raw_user_meta_data->>'whatsapp'), ''), '+56900000000'),
       'super_admin',
-      'approved'
+      'approved',
+      now()
     )
     on conflict (id) do update
       set role = 'super_admin',
           status = 'approved',
-          unit_number = 'Administración';
+          unit_number = 'Administración',
+          terms_accepted_at = coalesce(public.profiles.terms_accepted_at, now());
     return new;
   end if;
 
@@ -88,14 +89,18 @@ begin
     raise exception 'Número de WhatsApp inválido. Ejemplo: +56912345678';
   end if;
 
+  if coalesce(new.raw_user_meta_data->>'terms_accepted', 'false') <> 'true' then
+    raise exception 'Debes aceptar el consentimiento de privacidad y normas del condominio para registrarte.';
+  end if;
+
   if v_open_until is not null and v_open_until > now() then
     v_initial_status := 'approved';
   else
     v_initial_status := 'pending';
   end if;
 
-  insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status)
-  values (new.id, coalesce(new.email, ''), v_full_name, v_unit, v_whatsapp, 'resident', v_initial_status);
+  insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status, terms_accepted_at)
+  values (new.id, coalesce(new.email, ''), v_full_name, v_unit, v_whatsapp, 'resident', v_initial_status, now());
 
   return new;
 end;
@@ -347,13 +352,66 @@ $$;
 
 grant execute on function public.admin_delete_user(uuid) to authenticated;
 
--- 6. Separar tu cuenta personal (vecino normal) de la cuenta dedicada Super Admin
---    Primero regístrate en la app con el correo de administración (ej: admin@condominio.cl)
---    y luego ejecuta estas líneas:
-update public.profiles
-set role = 'resident', status = 'approved'
-where lower(email) = 'pulgarmatias8@gmail.com';
+-- 5b. Políticas reforzadas en products (vendedor no puede editar anuncios ocultados por Admin)
+drop policy if exists "Vendedor edita sus propios anuncios" on public.products;
+create policy "Vendedor edita sus propios anuncios"
+  on public.products for update
+  to authenticated
+  using (
+    public.is_approved_resident()
+    and seller_id = auth.uid()
+    and is_hidden_by_admin = false
+  )
+  with check (
+    public.is_approved_resident()
+    and seller_id = auth.uid()
+    and is_hidden_by_admin = false
+  );
 
-update public.profiles
-set role = 'super_admin', status = 'approved'
-where lower(email) = 'admin@condominio.cl';
+-- 5c. Funciones de Consentimiento (Ley 19.628 / 21.719) y Derecho a Eliminar Cuenta propia (ARCO)
+create or replace function public.accept_terms()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión.';
+  end if;
+  update public.profiles
+  set terms_accepted_at = now()
+  where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.accept_terms() to authenticated;
+
+create or replace function public.delete_own_account()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_role text;
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión.';
+  end if;
+
+  select role into v_role from public.profiles where id = auth.uid();
+  if v_role = 'super_admin' then
+    raise exception 'La cuenta Super Admin no puede eliminarse desde aquí.';
+  end if;
+
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.delete_own_account() to authenticated;
+
+-- 6. Ejemplo para asignar la cuenta Super Admin (reemplaza el correo si usas otro):
+-- update public.profiles
+-- set role = 'super_admin', status = 'approved', unit_number = 'Administración', terms_accepted_at = coalesce(terms_accepted_at, now())
+-- where lower(email) = 'admin@condominio.cl';

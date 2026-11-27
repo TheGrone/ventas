@@ -14,6 +14,7 @@ import {
 import { CONDO_NAME } from '../lib/supabase';
 import { isValidWhatsApp, normalizeWhatsApp } from '../lib/format';
 import type { Theme } from '../hooks/useTheme';
+import { ConsentModal } from './ConsentModal';
 
 interface AuthScreenProps {
   theme: Theme;
@@ -26,6 +27,7 @@ interface AuthScreenProps {
     unitNumber: string;
     whatsapp: string;
     inviteCode: string;
+    termsAccepted: boolean;
   }) => Promise<void>;
   onRequestPasswordReset: (email: string) => Promise<void>;
 }
@@ -50,6 +52,8 @@ export function AuthScreen({
   const [apt, setApt] = useState(1);
   const [whatsapp, setWhatsapp] = useState('+569');
   const [inviteCode, setInviteCode] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -101,6 +105,12 @@ export function AuthScreen({
         setError('La contraseña debe tener al menos 8 caracteres.');
         return;
       }
+      if (!termsAccepted) {
+        setError(
+          'Debes marcar la casilla de consentimiento de privacidad y normas del condominio para registrarte.'
+        );
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -115,6 +125,7 @@ export function AuthScreen({
           unitNumber: formattedUnit,
           whatsapp: `+${normalizeWhatsApp(whatsapp)}`,
           inviteCode: inviteCode.trim(),
+          termsAccepted,
         });
         setSuccessMsg(
           '¡Tu cuenta de vecino fue creada! Ya puedes iniciar sesión y el administrador aprobará tu acceso.'
@@ -372,6 +383,31 @@ export function AuthScreen({
             </div>
           )}
 
+          {mode === 'register' && (
+            <div className="p-3.5 rounded-2xl bg-emerald-100/80 dark:bg-slate-800/90 border border-emerald-300 dark:border-slate-700 space-y-2">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 shrink-0"
+                />
+                <span className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 leading-snug">
+                  Doy mi consentimiento para compartir mi Nombre, Torre/Depto y WhatsApp
+                  solo con vecinos verificados del condominio y acepto las normas de buen
+                  uso.
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowConsentModal(true)}
+                className="text-xs font-bold text-emerald-800 dark:text-emerald-400 underline pl-7"
+              >
+                Leer Consentimiento, Privacidad y Normas completas
+              </button>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={submitting}
@@ -404,11 +440,22 @@ export function AuthScreen({
         <div className="mt-6 pt-4 border-t border-emerald-200/80 dark:border-slate-800 flex items-start gap-2.5 text-xs sm:text-sm text-emerald-950/80 dark:text-slate-300">
           <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
           <p>
-            Sitio seguro solo para vecinos del condominio. El administrador verifica cada
-            cuenta antes de autorizar el acceso.
+            Sitio seguro solo para vecinos del condominio.{' '}
+            <button
+              type="button"
+              onClick={() => setShowConsentModal(true)}
+              className="font-bold text-emerald-800 dark:text-emerald-400 underline"
+            >
+              Ver Privacidad y Normas
+            </button>
+            .
           </p>
         </div>
       </div>
+
+      {showConsentModal && (
+        <ConsentModal mode="read" onClose={() => setShowConsentModal(false)} />
+      )}
     </div>
   );
 }
