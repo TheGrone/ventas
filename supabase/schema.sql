@@ -11,6 +11,7 @@ create table if not exists public.condo_settings (
   id integer primary key default 1 check (id = 1),
   condo_name text not null default 'Mi Condominio',
   invite_code text not null default 'CONDO2026',
+  admin_whatsapp text not null default '',
   updated_at timestamptz not null default now()
 );
 
@@ -404,6 +405,49 @@ create policy "Imágenes visibles públicamente"
   on storage.objects for select
   to public
   using (bucket_id = 'product-images');
+
+-- 10. Permisos de tabla para authenticated (RLS controla el acceso real)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on table public.profiles to authenticated;
+grant select, insert, update, delete on table public.categories to authenticated;
+grant select, insert, update, delete on table public.products to authenticated;
+grant select, insert, update, delete on table public.invite_codes to authenticated;
+grant select, update on table public.condo_settings to authenticated;
+grant select, insert on table public.moderation_logs to authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_approved_resident() to authenticated;
+
+create or replace function public.get_admin_whatsapp()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_phone text;
+begin
+  if auth.uid() is null then
+    return '';
+  end if;
+
+  select nullif(trim(admin_whatsapp), '') into v_phone
+  from public.condo_settings
+  where id = 1;
+
+  if v_phone is null then
+    select whatsapp into v_phone
+    from public.profiles
+    where role = 'admin' and status = 'approved'
+    order by created_at asc
+    limit 1;
+  end if;
+
+  return coalesce(v_phone, '');
+end;
+$$;
+
+grant execute on function public.get_admin_whatsapp() to authenticated;
 
 -- ============================================================================
 -- PASO FINAL OBLIGATORIO (ejecutar después de crear tu primera cuenta):

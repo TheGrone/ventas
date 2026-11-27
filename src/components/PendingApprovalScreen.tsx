@@ -1,6 +1,19 @@
-import { Clock, LogOut, Moon, RefreshCw, ShieldAlert, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Clock,
+  LogOut,
+  MessageCircle,
+  Moon,
+  Pencil,
+  RefreshCw,
+  ShieldAlert,
+  Sun,
+} from 'lucide-react';
+import { buildAdminApprovalWhatsAppUrl } from '../lib/format';
+import { supabase } from '../lib/supabase';
 import type { Profile } from '../types/database';
 import type { Theme } from '../hooks/useTheme';
+import { ProfileModal } from './ProfileModal';
 
 interface PendingApprovalScreenProps {
   profile: Profile;
@@ -18,64 +31,144 @@ export function PendingApprovalScreen({
   onSignOut,
 }: PendingApprovalScreenProps) {
   const isSuspended = profile.status === 'suspended';
+  const [adminWhatsapp, setAdminWhatsapp] = useState<string>('');
+  const [checking, setChecking] = useState(false);
+  const [editingSelf, setEditingSelf] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    supabase.rpc('get_admin_whatsapp').then(({ data }) => {
+      if (active && typeof data === 'string') {
+        setAdminWhatsapp(data);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleRefresh = async () => {
+    setChecking(true);
+    await onRefresh();
+    setChecking(false);
+  };
+
+  const adminWaUrl = adminWhatsapp
+    ? buildAdminApprovalWhatsAppUrl(
+        adminWhatsapp,
+        profile.full_name,
+        profile.unit_number,
+        profile.whatsapp
+      )
+    : '';
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-emerald-100 dark:bg-slate-950 px-4 relative">
+    <div className="min-h-screen flex items-center justify-center bg-emerald-100 dark:bg-slate-950 px-4 py-8 relative">
       <button
         type="button"
         onClick={onToggleTheme}
-        title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-        className="fixed top-4 right-4 p-2.5 rounded-xl bg-emerald-50/90 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700 text-emerald-800 dark:text-emerald-300 shadow-sm transition"
+        className="fixed top-4 right-4 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50/90 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700 text-emerald-900 dark:text-emerald-300 text-xs font-bold shadow-sm transition"
       >
-        {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        {theme === 'dark' ? (
+          <>
+            <Sun className="w-4 h-4" />
+            <span>Modo claro</span>
+          </>
+        ) : (
+          <>
+            <Moon className="w-4 h-4" />
+            <span>Modo oscuro</span>
+          </>
+        )}
       </button>
 
-      <div className="max-w-md w-full bg-emerald-50/95 dark:bg-slate-900 rounded-2xl border border-emerald-200 dark:border-slate-800 shadow-sm p-6 sm:p-8 text-center">
+      <div className="max-w-md w-full bg-emerald-50/95 dark:bg-slate-900 rounded-3xl border-2 border-emerald-200 dark:border-slate-800 shadow-lg p-6 sm:p-8 text-center">
         <div
-          className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center mb-4 ${
+          className={`w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-sm ${
             isSuspended
               ? 'bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400'
               : 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
           }`}
         >
           {isSuspended ? (
-            <ShieldAlert className="w-7 h-7" />
+            <ShieldAlert className="w-9 h-9" />
           ) : (
-            <Clock className="w-7 h-7" />
+            <Clock className="w-9 h-9" />
           )}
         </div>
 
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-          {isSuspended ? 'Cuenta suspendida' : 'Esperando aprobación del administrador'}
+        <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+          {isSuspended
+            ? 'Cuenta suspendida'
+            : '¡Registro recibido! Falta solo un paso'}
         </h2>
 
-        <p className="text-sm text-slate-700 dark:text-slate-300 mt-2 leading-relaxed">
+        <p className="text-base text-slate-700 dark:text-slate-300 mt-3 leading-relaxed">
           {isSuspended
-            ? `Tu acceso al mercado del condominio fue suspendido temporalmente. Si crees que es un error, contacta a la administración.`
-            : `Hola ${profile.full_name} (${profile.unit_number}). Para evitar suplantación de identidad, el administrador debe confirmar tu cuenta antes de que puedas ver o publicar anuncios.`}
+            ? 'Tu acceso al mercado del condominio fue suspendido temporalmente. Si crees que es un error, escríbele al administrador.'
+            : `Hola ${profile.full_name} (${profile.unit_number}). Para cuidar la seguridad de todos los vecinos, el administrador debe aprobar tu ingreso.`}
         </p>
 
-        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-          {!isSuspended && (
-            <button
-              type="button"
-              onClick={() => void onRefresh()}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition"
+        {!isSuspended && adminWaUrl && (
+          <div className="mt-5 p-4 rounded-2xl bg-emerald-100/90 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800">
+            <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-200 mb-3">
+              Presiona el botón verde para avisarle al Administrador por WhatsApp que ya te registraste:
+            </p>
+            <a
+              href={adminWaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold shadow-md transition"
             >
-              <RefreshCw className="w-4 h-4" />
-              Verificar estado
-            </button>
+              <MessageCircle className="w-5 h-5 shrink-0" />
+              <span>Avisar al Admin por WhatsApp</span>
+            </a>
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col gap-3">
+          {!isSuspended && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={checking}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 dark:bg-emerald-700 hover:bg-slate-800 dark:hover:bg-emerald-600 text-white text-base font-bold transition"
+              >
+                <RefreshCw className={`w-5 h-5 ${checking ? 'animate-spin' : ''}`} />
+                <span>{checking ? 'Revisando...' : 'Ya me aprobaron — Entrar'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditingSelf(true)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border-2 border-emerald-300 dark:border-slate-700 hover:bg-emerald-100 dark:hover:bg-slate-800 text-emerald-900 dark:text-emerald-300 text-sm font-bold transition"
+              >
+                <Pencil className="w-4 h-4" />
+                <span>¿Te equivocaste en tu nombre o depto? Corregir datos</span>
+              </button>
+            </>
           )}
+
           <button
             type="button"
             onClick={() => void onSignOut()}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-300 dark:border-slate-700 hover:bg-emerald-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-medium transition"
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border-2 border-emerald-300 dark:border-slate-700 hover:bg-emerald-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-base font-semibold transition"
           >
-            <LogOut className="w-4 h-4" />
-            Cerrar sesión
+            <LogOut className="w-5 h-5" />
+            <span>Cerrar sesión</span>
           </button>
         </div>
       </div>
+
+      {editingSelf && (
+        <ProfileModal
+          targetProfile={profile}
+          mode="self"
+          onClose={() => setEditingSelf(false)}
+          onSaved={onRefresh}
+        />
+      )}
     </div>
   );
 }

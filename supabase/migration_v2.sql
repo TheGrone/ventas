@@ -55,6 +55,15 @@ create policy "Solo admin gestiona invite_codes"
   using (public.is_admin())
   with check (public.is_admin());
 
+-- Permisos de tabla para authenticated (RLS sigue controlando quién accede)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on table public.profiles to authenticated;
+grant select, insert, update, delete on table public.categories to authenticated;
+grant select, insert, update, delete on table public.products to authenticated;
+grant select, insert, update, delete on table public.invite_codes to authenticated;
+grant select, update on table public.condo_settings to authenticated;
+grant select, insert on table public.moderation_logs to authenticated;
+
 -- Insertar código inicial si no existe ninguno
 insert into public.invite_codes (code, label, max_uses, is_active)
 values ('CONDO2026', 'Código general inicial', null, true)

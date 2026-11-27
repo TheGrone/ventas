@@ -45,6 +45,20 @@ export function buildWhatsAppUrl(
 }
 
 /**
+ * Genera el enlace wa.me para que un vecino recién registrado avise al Administrador y pida autorización.
+ */
+export function buildAdminApprovalWhatsAppUrl(
+  adminPhone: string,
+  residentName: string,
+  residentUnit: string,
+  residentWhatsapp: string
+): string {
+  const phone = normalizeWhatsApp(adminPhone);
+  const message = `Hola Administrador, buenas. Me acabo de registrar en el Mercado del Condominio y solicito autorización para ingresar.\n\n• Nombre: ${residentName}\n• Ubicación: ${residentUnit}\n• Mi WhatsApp: ${residentWhatsapp}\n\nMuchas gracias.`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+/**
  * Valida que una URL de imagen sea HTTPS segura (previene javascript: o data: maliciosos).
  */
 export function isSafeImageUrl(url: string | null | undefined): boolean {
@@ -55,4 +69,22 @@ export function isSafeImageUrl(url: string | null | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Extrae torre (1-11), piso (1-7) y depto (1-4) de un texto como "Torre 8 - Depto 403".
+ */
+export function parseUnitNumber(unitNumber: string): {
+  tower: number;
+  floor: number;
+  apt: number;
+} {
+  const match = unitNumber.match(/Torre\s*(\d+)\s*-\s*Depto\s*(\d)0(\d)/i);
+  if (match) {
+    const tower = Math.min(11, Math.max(1, Number(match[1])));
+    const floor = Math.min(7, Math.max(1, Number(match[2])));
+    const apt = Math.min(4, Math.max(1, Number(match[3])));
+    return { tower, floor, apt };
+  }
+  return { tower: 1, floor: 1, apt: 1 };
 }

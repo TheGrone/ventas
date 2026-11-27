@@ -16,6 +16,7 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   const fetchProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
@@ -56,8 +57,11 @@ export function useAuth() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
       setSession(newSession);
       if (newSession?.user?.id) {
         await fetchProfile(newSession.user.id);
@@ -101,8 +105,27 @@ export function useAuth() {
     if (error) throw error;
   };
 
+  const requestPasswordReset = async (email: string) => {
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    setIsPasswordRecovery(false);
+  };
+
+  const clearPasswordRecovery = () => {
+    setIsPasswordRecovery(false);
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
+    setIsPasswordRecovery(false);
     setProfile(null);
     setSession(null);
   };
@@ -111,8 +134,12 @@ export function useAuth() {
     session,
     profile,
     loading,
+    isPasswordRecovery,
     signIn,
     signUp,
+    requestPasswordReset,
+    updatePassword,
+    clearPasswordRecovery,
     signOut,
     refreshProfile,
   };

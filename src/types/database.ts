@@ -43,6 +43,7 @@ export interface CondoSettings {
   id: number;
   condo_name: string;
   invite_code: string;
+  admin_whatsapp?: string;
   updated_at: string;
 }
 
