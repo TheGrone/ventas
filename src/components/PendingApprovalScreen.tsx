@@ -121,7 +121,8 @@ export function PendingApprovalScreen({
                   c.whatsapp,
                   profile.full_name,
                   profile.unit_number,
-                  profile.whatsapp
+                  profile.whatsapp,
+                  profile.terms_accepted_at
                 )}
                 target="_blank"
                 rel="noopener noreferrer"

@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle2,
   DoorOpen,
+  FileCheck2,
   FolderPlus,
   KeyRound,
   Lock,
@@ -18,7 +19,7 @@ import {
   Users,
   UserX,
 } from 'lucide-react';
-import { isValidWhatsApp, normalizeWhatsApp } from '../lib/format';
+import { formatDateTimeCL, isValidWhatsApp, normalizeWhatsApp } from '../lib/format';
 import { supabase } from '../lib/supabase';
 import type {
   Category,
@@ -680,6 +681,18 @@ export function AdminPanel({
                         <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 break-all">
                           {u.email} · WhatsApp: {u.whatsapp}
                         </p>
+                        <div className="mt-1">
+                          {u.terms_accepted_at ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-semibold">
+                              <FileCheck2 className="w-3 h-3 shrink-0" />
+                              Términos aceptados: {formatDateTimeCL(u.terms_accepted_at)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[11px] font-semibold">
+                              Pendiente de aceptar términos
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {isSuperAdmin && (

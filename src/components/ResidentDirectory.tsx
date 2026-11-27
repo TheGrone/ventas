@@ -4,6 +4,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Download,
+  FileCheck2,
   LayoutList,
   MessageCircle,
   Pencil,
@@ -11,7 +13,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
-import { normalizeWhatsApp } from '../lib/format';
+import { formatDateTimeCL, normalizeWhatsApp } from '../lib/format';
 import type { Profile } from '../types/database';
 
 interface ResidentDirectoryProps {
@@ -128,6 +130,50 @@ export function ResidentDirectory({
     setCollapsedTowers(next);
   };
 
+  const handleExportConsentCsv = () => {
+    const escapeCell = (val: string) => `"${val.replace(/"/g, '""')}"`;
+    const headers = [
+      'Nombre Completo',
+      'Torre / Depto',
+      'Correo',
+      'WhatsApp',
+      'Rol',
+      'Estado Cuenta',
+      'Consentimiento Aceptado',
+      'Fecha y Hora Aceptacion',
+      'ID Usuario',
+    ];
+
+    const rows = filteredUsers.map((u) => [
+      u.full_name,
+      u.unit_number,
+      u.email,
+      u.whatsapp,
+      u.role,
+      u.status,
+      u.terms_accepted_at ? 'SI' : 'PENDIENTE',
+      u.terms_accepted_at ? formatDateTimeCL(u.terms_accepted_at) : '-',
+      u.id,
+    ]);
+
+    const csvContent =
+      '\uFEFF' +
+      [headers, ...rows]
+        .map((row) => row.map((cell) => escapeCell(String(cell))).join(';'))
+        .join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `comprobante-consentimientos-${today}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const renderResidentRow = (u: Profile) => {
     const waLink = `https://wa.me/${normalizeWhatsApp(u.whatsapp)}`;
     return (
@@ -162,6 +208,18 @@ export function ResidentDirectory({
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 break-all">
             {u.email} · {u.whatsapp}
           </p>
+          <div className="mt-1">
+            {u.terms_accepted_at ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/90 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-semibold">
+                <FileCheck2 className="w-3 h-3 shrink-0" />
+                Términos aceptados: {formatDateTimeCL(u.terms_accepted_at)}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[11px] font-semibold">
+                Pendiente de aceptar términos
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -226,8 +284,19 @@ export function ResidentDirectory({
           </h2>
         </div>
 
-        {/* Toggle Vista Agrupada por Torre vs Lista paginada */}
-        <div className="inline-flex p-1 rounded-xl bg-emerald-100 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700">
+        {/* Acciones de vista y descarga de comprobante */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportConsentCsv}
+            title="Descargar planilla Excel/CSV con fecha y hora de consentimiento de cada vecino"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 dark:bg-emerald-700 hover:bg-slate-800 dark:hover:bg-emerald-600 text-white text-xs font-bold shadow-xs transition"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Comprobante (Excel/CSV)
+          </button>
+
+          <div className="inline-flex p-1 rounded-xl bg-emerald-100 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700">
           <button
             type="button"
             onClick={() => setViewMode('grouped')}
@@ -255,6 +324,7 @@ export function ResidentDirectory({
             <LayoutList className="w-3.5 h-3.5" />
             Lista
           </button>
+        </div>
         </div>
       </div>
 

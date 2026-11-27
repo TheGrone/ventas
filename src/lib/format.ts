@@ -45,16 +45,36 @@ export function buildWhatsAppUrl(
 }
 
 /**
+ * Formatea una fecha ISO en formato chileno legible (ej: 27/11/2026, 12:38).
+ */
+export function formatDateTimeCL(isoDate: string | null | undefined): string {
+  if (!isoDate) return '';
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
  * Genera el enlace wa.me para que un vecino recién registrado avise al Administrador y pida autorización.
  */
 export function buildAdminApprovalWhatsAppUrl(
   adminPhone: string,
   residentName: string,
   residentUnit: string,
-  residentWhatsapp: string
+  residentWhatsapp: string,
+  termsAcceptedAt?: string | null
 ): string {
   const phone = normalizeWhatsApp(adminPhone);
-  const message = `Hola Administrador, buenas. Me acabo de registrar en el Mercado del Condominio y solicito autorización para ingresar.\n\n• Nombre: ${residentName}\n• Ubicación: ${residentUnit}\n• Mi WhatsApp: ${residentWhatsapp}\n\nMuchas gracias.`;
+  const consentLine = termsAcceptedAt
+    ? `\n• Consentimiento y Normas: Aceptado el ${formatDateTimeCL(termsAcceptedAt)}`
+    : '\n• Consentimiento y Normas: Aceptado al registrarse';
+  const message = `Hola Administrador, buenas. Me acabo de registrar en el Mercado del Condominio y solicito autorización para ingresar.\n\n• Nombre: ${residentName}\n• Ubicación: ${residentUnit}\n• Mi WhatsApp: ${residentWhatsapp}${consentLine}\n\nMuchas gracias.`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
