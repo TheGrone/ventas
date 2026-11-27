@@ -29,7 +29,7 @@ create table if not exists public.profiles (
   full_name text not null check (char_length(trim(full_name)) between 2 and 80),
   unit_number text not null check (char_length(trim(unit_number)) between 1 and 30),
   whatsapp text not null check (whatsapp ~ '^\+?[0-9]{8,15}$'),
-  role text not null default 'resident' check (role in ('resident', 'admin')),
+  role text not null default 'resident' check (role in ('resident', 'admin', 'super_admin')),
   status text not null default 'pending' check (status in ('pending', 'approved', 'suspended')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -48,7 +48,22 @@ as $$
   select exists (
     select 1 from public.profiles
     where id = auth.uid()
-      and role = 'admin'
+      and role in ('admin', 'super_admin')
+      and status = 'approved'
+  );
+$$;
+
+create or replace function public.is_super_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role = 'super_admin'
       and status = 'approved'
   );
 $$;
@@ -93,16 +108,27 @@ begin
     return new;
   end if;
 
-  -- Si no es admin, no puede modificar role, status ni email
-  if not public.is_admin() then
+  -- Si no es super_admin, nadie puede editar datos personales de otro usuario
+  if not public.is_super_admin() then
     if new.role is distinct from old.role then
-      raise exception 'No tienes permisos para cambiar el rol.';
-    end if;
-    if new.status is distinct from old.status then
-      raise exception 'No tienes permisos para cambiar el estado de aprobación.';
+      raise exception 'Solo el Super Admin puede cambiar roles.';
     end if;
     if new.email is distinct from old.email then
       raise exception 'No puedes modificar el correo directamente.';
+    end if;
+
+    -- Si es un vecino normal (no admin), tampoco puede cambiar su estado
+    if not public.is_admin() then
+      if new.status is distinct from old.status then
+        raise exception 'No tienes permisos para cambiar el estado de aprobación.';
+      end if;
+    elsif old.id <> auth.uid() then
+      -- Un admin normal solo puede aprobar/suspender, NO editar nombre/torre/whatsapp de terceros
+      if new.full_name is distinct from old.full_name
+         or new.unit_number is distinct from old.unit_number
+         or new.whatsapp is distinct from old.whatsapp then
+        raise exception 'Solo la cuenta Super Admin puede corregir datos personales de otros vecinos.';
+      end if;
     end if;
   end if;
 
@@ -429,6 +455,7 @@ grant select, insert, update, delete on table public.invite_codes to authenticat
 grant select, update on table public.condo_settings to authenticated;
 grant select, insert on table public.moderation_logs to authenticated;
 grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_super_admin() to authenticated;
 grant execute on function public.is_approved_resident() to authenticated;
 
 create or replace function public.get_admin_whatsapp()
@@ -452,8 +479,8 @@ begin
   if v_phone is null then
     select whatsapp into v_phone
     from public.profiles
-    where role = 'admin' and status = 'approved'
-    order by created_at asc
+    where role in ('super_admin', 'admin') and status = 'approved'
+    order by (role = 'super_admin') desc, created_at asc
     limit 1;
   end if;
 

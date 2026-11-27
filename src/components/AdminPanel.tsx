@@ -19,20 +19,29 @@ import {
 } from 'lucide-react';
 import { isValidWhatsApp, normalizeWhatsApp } from '../lib/format';
 import { supabase } from '../lib/supabase';
-import type { Category, CondoSettings, InviteCode, Profile } from '../types/database';
+import type {
+  Category,
+  CondoSettings,
+  InviteCode,
+  Profile,
+  UserRole,
+} from '../types/database';
 import { ProfileModal } from './ProfileModal';
 
 interface AdminPanelProps {
   adminId: string;
+  adminRole: UserRole;
   categories: Category[];
   onDataChanged: () => Promise<void>;
 }
 
 export function AdminPanel({
   adminId,
+  adminRole,
   categories,
   onDataChanged,
 }: AdminPanelProps) {
+  const isSuperAdmin = adminRole === 'super_admin';
   const [users, setUsers] = useState<Profile[]>([]);
   const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
   const [adminWhatsapp, setAdminWhatsapp] = useState('');
@@ -540,14 +549,16 @@ export function AdminPanel({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingUser(u)}
-                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-300 dark:border-slate-700 bg-emerald-100/70 dark:bg-slate-800 hover:bg-emerald-200/70 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      Editar
-                    </button>
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingUser(u)}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-300 dark:border-slate-700 bg-emerald-100/70 dark:bg-slate-800 hover:bg-emerald-200/70 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Corregir datos
+                      </button>
+                    )}
                     <a
                       href={verifyWa}
                       target="_blank"
@@ -808,6 +819,11 @@ export function AdminPanel({
                 <span className="text-emerald-800 dark:text-emerald-400 text-xs sm:text-sm">
                   ({u.unit_number})
                 </span>
+                {u.role === 'super_admin' && (
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                    Super Admin
+                  </span>
+                )}
                 {u.role === 'admin' && (
                   <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
                     Admin
@@ -820,14 +836,16 @@ export function AdminPanel({
                 )}
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setEditingUser(u)}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 dark:text-emerald-400 hover:underline"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  Editar
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(u)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 dark:text-emerald-400 hover:underline"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Corregir
+                  </button>
+                )}
                 {u.id !== adminId && (
                   <>
                     <button

@@ -77,7 +77,7 @@ export default function App() {
     if (cats) setCategories(cats as Category[]);
     if (prods) setProducts(prods as Product[]);
 
-    if (profile.role === 'admin') {
+    if (profile.role === 'admin' || profile.role === 'super_admin') {
       const { count } = await supabase
         .from('profiles')
         .select('id', { count: 'exact', head: true })
@@ -114,6 +114,9 @@ export default function App() {
     });
   }, [products, activeTab, profile?.id, selectedCategory, selectedTower, searchQuery]);
 
+  const isAdminUser =
+    profile?.role === 'admin' || profile?.role === 'super_admin';
+
   const handleDeleteProduct = async (product: Product) => {
     const confirmed = window.confirm(
       `¿Eliminar el anuncio "${product.title}"? Esta acción no se puede deshacer.`
@@ -122,7 +125,7 @@ export default function App() {
 
     const { error } = await supabase.from('products').delete().eq('id', product.id);
     if (!error) {
-      if (profile?.role === 'admin' && product.seller_id !== profile.id) {
+      if (isAdminUser && profile && product.seller_id !== profile.id) {
         await supabase.from('moderation_logs').insert({
           admin_id: profile.id,
           action: 'delete_product',
@@ -136,7 +139,7 @@ export default function App() {
   };
 
   const handleToggleHidden = async (product: Product) => {
-    if (profile?.role !== 'admin') return;
+    if (!isAdminUser || !profile) return;
     const nextHidden = !product.is_hidden_by_admin;
     let note: string | null = null;
 
@@ -322,7 +325,7 @@ export default function App() {
             <span>Mis Anuncios</span>
           </button>
 
-          {profile.role === 'admin' && (
+          {isAdminUser && (
             <button
               type="button"
               onClick={() => setActiveTab('admin')}
@@ -333,7 +336,9 @@ export default function App() {
               }`}
             >
               <ShieldCheck className="w-5 h-5" />
-              <span>Administración</span>
+              <span>
+                {profile.role === 'super_admin' ? 'Super Admin' : 'Administración'}
+              </span>
               {pendingCount > 0 && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-red-600 text-white shadow-xs">
                   {pendingCount}
@@ -346,9 +351,10 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-5 sm:py-6">
-        {activeTab === 'admin' && profile.role === 'admin' ? (
+        {activeTab === 'admin' && isAdminUser ? (
           <AdminPanel
             adminId={profile.id}
+            adminRole={profile.role}
             categories={categories}
             onDataChanged={loadMarketData}
           />

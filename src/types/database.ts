@@ -1,4 +1,4 @@
-export type UserRole = 'resident' | 'admin';
+export type UserRole = 'resident' | 'admin' | 'super_admin';
 export type AccountStatus = 'pending' | 'approved' | 'suspended';
 
 export interface Profile {

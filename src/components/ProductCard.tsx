@@ -30,7 +30,8 @@ export function ProductCard({
   const [imgIndex, setImgIndex] = useState(0);
 
   const isOwner = product.seller_id === currentUser.id;
-  const isAdmin = currentUser.role === 'admin';
+  const isAdmin =
+    currentUser.role === 'admin' || currentUser.role === 'super_admin';
   const sellerName = product.seller?.full_name || 'Vecino';
   const sellerUnit = product.seller?.unit_number || 'Torre / Depto';
   const sellerPhone = product.seller?.whatsapp || '';

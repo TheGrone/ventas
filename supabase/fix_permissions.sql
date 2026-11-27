@@ -128,7 +128,114 @@ grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_approved_resident() to authenticated;
 grant execute on function public.get_admin_whatsapp() to authenticated;
 
--- 4. Asegurar políticas RLS de categories e invite_codes
+-- 4. Permitir rol 'super_admin' y blindar edición de datos personales de terceros
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles
+  add constraint profiles_role_check
+  check (role in ('resident', 'admin', 'super_admin'));
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role in ('admin', 'super_admin')
+      and status = 'approved'
+  );
+$$;
+
+create or replace function public.is_super_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role = 'super_admin'
+      and status = 'approved'
+  );
+$$;
+
+grant execute on function public.is_super_admin() to authenticated;
+
+create or replace function public.protect_profile_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    new.updated_at := now();
+    return new;
+  end if;
+
+  if not public.is_super_admin() then
+    if new.role is distinct from old.role then
+      raise exception 'Solo el Super Admin puede cambiar roles.';
+    end if;
+    if new.email is distinct from old.email then
+      raise exception 'No puedes modificar el correo directamente.';
+    end if;
+
+    if not public.is_admin() then
+      if new.status is distinct from old.status then
+        raise exception 'No tienes permisos para cambiar el estado de aprobación.';
+      end if;
+    elsif old.id <> auth.uid() then
+      if new.full_name is distinct from old.full_name
+         or new.unit_number is distinct from old.unit_number
+         or new.whatsapp is distinct from old.whatsapp then
+        raise exception 'Solo la cuenta Super Admin puede corregir datos personales de otros vecinos.';
+      end if;
+    end if;
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- Actualizar get_admin_whatsapp para buscar super_admin o admin
+create or replace function public.get_admin_whatsapp()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_phone text;
+begin
+  if auth.uid() is null then
+    return '';
+  end if;
+
+  select nullif(trim(admin_whatsapp), '') into v_phone
+  from public.condo_settings
+  where id = 1;
+
+  if v_phone is null then
+    select whatsapp into v_phone
+    from public.profiles
+    where role in ('super_admin', 'admin') and status = 'approved'
+    order by (role = 'super_admin') desc, created_at asc
+    limit 1;
+  end if;
+
+  return coalesce(v_phone, '');
+end;
+$$;
+
+-- Asegurar políticas RLS de categories e invite_codes
 alter table public.categories enable row level security;
 alter table public.invite_codes enable row level security;
 
@@ -184,12 +291,13 @@ $$;
 
 grant execute on function public.admin_delete_user(uuid) to authenticated;
 
--- 6. Dar acceso total de Administrador SOLO a pulgarmatias8@gmail.com
+-- 6. Separar tu cuenta personal (vecino normal) de la cuenta dedicada Super Admin
+--    Primero regístrate en la app con el correo de administración (ej: admin@condominio.cl)
+--    y luego ejecuta estas líneas:
 update public.profiles
-set role = 'resident'
-where lower(email) <> 'pulgarmatias8@gmail.com'
-  and role = 'admin';
+set role = 'resident', status = 'approved'
+where lower(email) = 'pulgarmatias8@gmail.com';
 
 update public.profiles
-set role = 'admin', status = 'approved'
-where lower(email) = 'pulgarmatias8@gmail.com';
+set role = 'super_admin', status = 'approved'
+where lower(email) = 'admin@condominio.cl';
