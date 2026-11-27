@@ -189,7 +189,8 @@ $$;
 
 grant execute on function public.get_support_contacts() to authenticated;
 
--- 4. Permitir rol 'super_admin' y blindar edición de datos personales de terceros
+-- 4. Eliminar trigger antiguo si existía, permitir rol 'super_admin' y blindar edición de datos personales de terceros
+drop trigger if exists trg_enforce_single_admin on public.profiles;
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles
   add constraint profiles_role_check
