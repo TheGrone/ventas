@@ -81,7 +81,39 @@ create policy "Solo admin gestiona invite_codes"
   using (public.is_admin())
   with check (public.is_admin());
 
--- 5. Dar acceso total de Administrador SOLO a pulgarmatias8@gmail.com
+-- 5. Función segura para que el Admin elimine permanentemente una cuenta (ej: cuentas de prueba)
+create or replace function public.admin_delete_user(target_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_target_info text;
+begin
+  if not public.is_admin() then
+    raise exception 'Solo el administrador puede eliminar cuentas.';
+  end if;
+
+  if target_user_id = auth.uid() then
+    raise exception 'No puedes eliminar tu propia cuenta de administrador.';
+  end if;
+
+  select coalesce(full_name || ' (' || unit_number || ')', target_user_id::text)
+  into v_target_info
+  from public.profiles
+  where id = target_user_id;
+
+  insert into public.moderation_logs (admin_id, action, target_type, target_id, details)
+  values (auth.uid(), 'delete_user', 'profile', target_user_id, coalesce(v_target_info, 'Cuenta eliminada'));
+
+  delete from auth.users where id = target_user_id;
+end;
+$$;
+
+grant execute on function public.admin_delete_user(uuid) to authenticated;
+
+-- 6. Dar acceso total de Administrador SOLO a pulgarmatias8@gmail.com
 update public.profiles
 set role = 'resident'
 where lower(email) <> 'pulgarmatias8@gmail.com'

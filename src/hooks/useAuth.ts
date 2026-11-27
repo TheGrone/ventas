@@ -15,20 +15,26 @@ interface SignUpParams {
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-    if (!error && data) {
-      setProfile(data as Profile);
-    } else {
-      setProfile(null);
+      if (!error && data) {
+        setProfile(data as Profile);
+        return;
+      }
+
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
     }
   }, []);
 
@@ -38,44 +44,66 @@ export function useAuth() {
     }
   }, [session?.user?.id, fetchProfile]);
 
+  // 1. Escuchar cambios de sesión de forma SÍNCRONA (evita deadlocks de Supabase al cambiar de pestaña o presionar F5)
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
+    if (!isSupabaseConfigured) return;
 
     let mounted = true;
 
-    supabase.auth.getSession().then(async ({ data: { session: current } }) => {
+    supabase.auth.getSession().then(({ data: { session: current } }) => {
       if (!mounted) return;
       setSession(current);
-      if (current?.user?.id) {
-        await fetchProfile(current.user.id);
-      }
-      if (mounted) setLoading(false);
+      setAuthReady(true);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mounted) return;
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
       }
-      setSession(newSession);
-      if (newSession?.user?.id) {
-        await fetchProfile(newSession.user.id);
-      } else {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
         setProfile(null);
+        setAuthReady(true);
+        return;
       }
-      setLoading(false);
+      setSession(newSession);
+      setAuthReady(true);
     });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfile]);
+  }, []);
+
+  // 2. Cargar el perfil en un efecto separado cuando cambia el userId
+  const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    if (!authReady) return;
+
+    if (!userId) {
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setProfileLoading(true);
+
+    fetchProfile(userId).finally(() => {
+      if (!cancelled) {
+        setProfileLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, userId, fetchProfile]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -129,6 +157,8 @@ export function useAuth() {
     setProfile(null);
     setSession(null);
   };
+
+  const loading = !authReady || (Boolean(userId) && !profile && profileLoading);
 
   return {
     session,

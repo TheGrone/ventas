@@ -133,6 +133,30 @@ export function AdminPanel({
     await Promise.all([loadAdminData(), onDataChanged()]);
   };
 
+  const handleDeleteUser = async (user: Profile) => {
+    setErrorMsg(null);
+    setFeedback(null);
+
+    const confirmed = window.confirm(
+      `¿Eliminar permanentemente la cuenta de "${user.full_name}" (${user.unit_number}) y todos sus anuncios? Esta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+
+    const { error } = await supabase.rpc('admin_delete_user', {
+      target_user_id: user.id,
+    });
+
+    if (error) {
+      setErrorMsg(
+        `No se pudo eliminar la cuenta (${error.message}). Asegúrate de ejecutar supabase/fix_permissions.sql en Supabase.`
+      );
+      return;
+    }
+
+    setFeedback(`Cuenta de ${user.full_name} eliminada permanentemente.`);
+    await Promise.all([loadAdminData(), onDataChanged()]);
+  };
+
   const handleSaveAdminWhatsapp = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -396,10 +420,18 @@ export function AdminPanel({
                     <button
                       type="button"
                       onClick={() => handleUserStatus(u, 'suspended')}
-                      className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-700 dark:text-red-300 text-xs font-bold"
+                      className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 text-xs font-bold"
                     >
                       <UserX className="w-4 h-4" />
                       Rechazar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteUser(u)}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-700 dark:text-red-300 text-xs font-bold"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Eliminar
                     </button>
                   </div>
                 </div>
@@ -649,18 +681,28 @@ export function AdminPanel({
                   Editar
                 </button>
                 {u.id !== adminId && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleUserStatus(
-                        u,
-                        u.status === 'approved' ? 'suspended' : 'approved'
-                      )
-                    }
-                    className="text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white underline"
-                  >
-                    {u.status === 'approved' ? 'Suspender' : 'Reactivar'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleUserStatus(
+                          u,
+                          u.status === 'approved' ? 'suspended' : 'approved'
+                        )
+                      }
+                      className="text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white underline"
+                    >
+                      {u.status === 'approved' ? 'Suspender' : 'Reactivar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteUser(u)}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400 hover:underline"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Eliminar
+                    </button>
+                  </>
                 )}
               </div>
             </div>
