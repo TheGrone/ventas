@@ -22,6 +22,7 @@ interface ResidentDirectoryProps {
   isSuperAdmin: boolean;
   onEditUser: (user: Profile) => void;
   onToggleStatus: (user: Profile, status: 'approved' | 'suspended') => void;
+  onDemoteAdmin?: (user: Profile) => void;
   onDeleteUser: (user: Profile) => void;
 }
 
@@ -52,6 +53,7 @@ export function ResidentDirectory({
   isSuperAdmin,
   onEditUser,
   onToggleStatus,
+  onDemoteAdmin,
   onDeleteUser,
 }: ResidentDirectoryProps) {
   const [search, setSearch] = useState('');
@@ -233,6 +235,16 @@ export function ResidentDirectory({
             <MessageCircle className="w-3.5 h-3.5" />
             WSP
           </a>
+
+          {isSuperAdmin && u.role === 'admin' && u.id !== adminId && onDemoteAdmin && (
+            <button
+              type="button"
+              onClick={() => onDemoteAdmin(u)}
+              className="px-2.5 py-1.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900 text-purple-800 dark:text-purple-300 text-xs font-bold"
+            >
+              Pasar a Vecino
+            </button>
+          )}
 
           {isSuperAdmin && (
             <button

@@ -188,6 +188,34 @@ export function AdminPanel({
     await Promise.all([loadAdminData(), onDataChanged()]);
   };
 
+  const handleDemoteAdmin = async (user: Profile) => {
+    setErrorMsg(null);
+    setFeedback(null);
+    const confirmed = window.confirm(
+      `¿Quitar los permisos de administrador a "${user.full_name}" y dejarlo como vecino normal?`
+    );
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role: 'resident' })
+      .eq('id', user.id);
+
+    if (error) {
+      setErrorMsg(`No se pudo cambiar el rol: ${error.message}`);
+      return;
+    }
+
+    await logAction(
+      'demote_to_resident',
+      'profile',
+      user.id,
+      `${user.full_name} pasó a vecino normal`
+    );
+    setFeedback(`${user.full_name} ahora es vecino normal (sin acceso Admin).`);
+    await Promise.all([loadAdminData(), onDataChanged()]);
+  };
+
   const persistSupportContacts = async (nextContacts: SupportContact[]) => {
     const primaryPhone = nextContacts[0]?.whatsapp ?? '';
     const { error } = await supabase
@@ -753,6 +781,7 @@ export function AdminPanel({
             isSuperAdmin={isSuperAdmin}
             onEditUser={setEditingUser}
             onToggleStatus={handleUserStatus}
+            onDemoteAdmin={handleDemoteAdmin}
             onDeleteUser={handleDeleteUser}
           />
         </div>
