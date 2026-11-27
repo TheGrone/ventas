@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  DoorOpen,
   FolderPlus,
   KeyRound,
+  Lock,
   MessageCircle,
   Pencil,
   Phone,
@@ -34,6 +36,7 @@ export function AdminPanel({
   const [users, setUsers] = useState<Profile[]>([]);
   const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
   const [adminWhatsapp, setAdminWhatsapp] = useState('');
+  const [openAccessUntil, setOpenAccessUntil] = useState<string | null>(null);
   const [newCode, setNewCode] = useState('');
   const [newCodeLabel, setNewCodeLabel] = useState('');
   const [newCodeMaxUses, setNewCodeMaxUses] = useState('');
@@ -80,6 +83,7 @@ export function AdminPanel({
     if (settingsData) {
       const s = settingsData as CondoSettings;
       setAdminWhatsapp(s.admin_whatsapp ?? '');
+      setOpenAccessUntil(s.open_access_until ?? null);
     }
 
     setLoading(false);
@@ -181,6 +185,64 @@ export function AdminPanel({
 
     setAdminWhatsapp(formatted);
     setFeedback('WhatsApp del administrador guardado. Los nuevos vecinos te avisarán ahí.');
+  };
+
+  const isOpenAccessActive = Boolean(
+    openAccessUntil && new Date(openAccessUntil).getTime() > Date.now()
+  );
+
+  const handleSetOpenAccess = async (mode: 'today' | '24h' | 'off') => {
+    setErrorMsg(null);
+    setFeedback(null);
+
+    let nextUntil: string | null = null;
+    if (mode === 'today') {
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      nextUntil = endOfToday.toISOString();
+    } else if (mode === '24h') {
+      nextUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    const { error } = await supabase
+      .from('condo_settings')
+      .update({ open_access_until: nextUntil })
+      .eq('id', 1);
+
+    if (error) {
+      setErrorMsg(
+        `No se pudo cambiar el Acceso Libre (${error.message}). Ejecuta supabase/fix_permissions.sql en Supabase.`
+      );
+      return;
+    }
+
+    setOpenAccessUntil(nextUntil);
+    setFeedback(
+      mode === 'off'
+        ? 'Acceso libre desactivado. Ahora todos los nuevos vecinos requieren tu aprobación.'
+        : mode === 'today'
+          ? 'Acceso libre activado por el resto del día (hasta las 23:59). Aún requiere código del condominio.'
+          : 'Acceso libre activado por 24 horas. Aún requiere código del condominio.'
+    );
+  };
+
+  const handleApproveAllPending = async () => {
+    setErrorMsg(null);
+    setFeedback(null);
+    if (pendingUsers.length === 0) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ status: 'approved' })
+      .eq('status', 'pending');
+
+    if (error) {
+      setErrorMsg(`No se pudieron aprobar los pendientes: ${error.message}`);
+      return;
+    }
+
+    setFeedback(`Se aprobaron ${pendingUsers.length} vecino(s) pendiente(s).`);
+    await Promise.all([loadAdminData(), onDataChanged()]);
   };
 
   const handleGenerateCode = () => {
@@ -350,13 +412,99 @@ export function AdminPanel({
         </div>
       )}
 
+      {/* Modo Acceso Libre por el día */}
+      <section
+        className={`rounded-3xl border-2 p-4 sm:p-5 shadow-sm transition ${
+          isOpenAccessActive
+            ? 'bg-emerald-100/90 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700'
+            : 'bg-emerald-50/95 dark:bg-slate-900 border-emerald-200 dark:border-slate-800'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            {isOpenAccessActive ? (
+              <DoorOpen className="w-6 h-6 text-emerald-700 dark:text-emerald-400" />
+            ) : (
+              <Lock className="w-5 h-5 text-slate-700 dark:text-slate-300" />
+            )}
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+              Modo Acceso Libre (sin esperar tu aprobación)
+            </h2>
+          </div>
+
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-extrabold ${
+              isOpenAccessActive
+                ? 'bg-emerald-600 text-white'
+                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            {isOpenAccessActive ? 'ABIERTO AHORA' : 'CON APROBACIÓN MANUAL'}
+          </span>
+        </div>
+
+        <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 mb-3">
+          {isOpenAccessActive && openAccessUntil
+            ? `Activo hasta el ${new Date(openAccessUntil).toLocaleString('es-CL', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}. Quienes tengan el código del condominio entran automáticamente y luego vuelve a cerrarse solo.`
+            : 'Si hoy no puedes estar pendiente para aprobar vecinos, actívalo por el día. Igual seguirá pidiendo el código del condominio para evitar personas externas.'}
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleSetOpenAccess('today')}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs"
+          >
+            <DoorOpen className="w-4 h-4" />
+            Abrir solo por hoy (hasta 23:59)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSetOpenAccess('24h')}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl border border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-slate-800 hover:bg-emerald-200/70 dark:hover:bg-slate-700 text-emerald-900 dark:text-emerald-300 text-xs sm:text-sm font-bold"
+          >
+            Abrir por 24 horas
+          </button>
+
+          {isOpenAccessActive && (
+            <button
+              type="button"
+              onClick={() => handleSetOpenAccess('off')}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold"
+            >
+              <Lock className="w-4 h-4" />
+              Cerrar y pedir aprobación
+            </button>
+          )}
+        </div>
+      </section>
+
       {/* Aprobación de vecinos */}
       <section className="bg-emerald-50/95 dark:bg-slate-900 rounded-3xl border-2 border-emerald-200 dark:border-slate-800 p-4 sm:p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Shield className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Solicitudes pendientes ({pendingUsers.length})
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Shield className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              Solicitudes pendientes ({pendingUsers.length})
+            </h2>
+          </div>
+
+          {pendingUsers.length > 1 && (
+            <button
+              type="button"
+              onClick={handleApproveAllPending}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+            >
+              <UserCheck className="w-4 h-4" />
+              Aprobar todos ({pendingUsers.length})
+            </button>
+          )}
         </div>
 
         {loading ? (

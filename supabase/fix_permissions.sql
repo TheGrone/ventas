@@ -6,9 +6,80 @@
 --   3. Número de WhatsApp del Admin para que los nuevos vecinos avisen al registrarse
 -- ============================================================================
 
--- 1. Asegurar columna admin_whatsapp en condo_settings
+-- 1. Asegurar columnas admin_whatsapp y open_access_until en condo_settings
 alter table public.condo_settings
-  add column if not exists admin_whatsapp text not null default '';
+  add column if not exists admin_whatsapp text not null default '',
+  add column if not exists open_access_until timestamptz;
+
+-- 1b. Actualizar trigger handle_new_user() para soportar "Acceso Libre por el día"
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite_code text;
+  v_expected_code text;
+  v_open_until timestamptz;
+  v_initial_status text;
+  v_code_row public.invite_codes%rowtype;
+  v_full_name text;
+  v_unit text;
+  v_whatsapp text;
+begin
+  v_invite_code := trim(coalesce(new.raw_user_meta_data->>'invite_code', ''));
+
+  select invite_code, open_access_until
+  into v_expected_code, v_open_until
+  from public.condo_settings
+  where id = 1;
+
+  select * into v_code_row
+  from public.invite_codes
+  where upper(trim(code)) = upper(v_invite_code)
+    and is_active = true
+  limit 1;
+
+  if found then
+    if v_code_row.max_uses is not null and v_code_row.uses_count >= v_code_row.max_uses then
+      raise exception 'Este código de invitación ya alcanzó su límite de usos.';
+    end if;
+    update public.invite_codes
+    set uses_count = uses_count + 1
+    where id = v_code_row.id;
+  else
+    if v_expected_code is null or upper(v_invite_code) <> upper(trim(v_expected_code)) then
+      raise exception 'Código de invitación del condominio inválido.';
+    end if;
+  end if;
+
+  v_full_name := trim(coalesce(new.raw_user_meta_data->>'full_name', ''));
+  v_unit := trim(coalesce(new.raw_user_meta_data->>'unit_number', ''));
+  v_whatsapp := regexp_replace(coalesce(new.raw_user_meta_data->>'whatsapp', ''), '[^0-9+]', '', 'g');
+
+  if char_length(v_full_name) < 2 then
+    raise exception 'Debes ingresar tu nombre completo.';
+  end if;
+  if char_length(v_unit) < 1 then
+    raise exception 'Debes ingresar tu torre y departamento.';
+  end if;
+  if v_whatsapp !~ '^\+?[0-9]{8,15}$' then
+    raise exception 'Número de WhatsApp inválido. Ejemplo: +56912345678';
+  end if;
+
+  if v_open_until is not null and v_open_until > now() then
+    v_initial_status := 'approved';
+  else
+    v_initial_status := 'pending';
+  end if;
+
+  insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status)
+  values (new.id, coalesce(new.email, ''), v_full_name, v_unit, v_whatsapp, 'resident', v_initial_status);
+
+  return new;
+end;
+$$;
 
 -- 2. Función segura para que un vecino recién registrado (aún en estado pending)
 --    pueda abrir WhatsApp para avisarle al Admin sin exponer el código de invitación.

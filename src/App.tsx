@@ -444,6 +444,21 @@ export default function App() {
         />
       )}
 
+      {/* Botón flotante rápido en móvil para publicar en 1 toque */}
+      {activeTab !== 'admin' && !modalOpen && !profileModalOpen && (
+        <button
+          type="button"
+          onClick={() => {
+            setEditingProduct(null);
+            setModalOpen(true);
+          }}
+          className="fixed bottom-5 right-5 sm:hidden z-40 inline-flex items-center gap-2 px-5 py-3.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-base font-extrabold shadow-xl ring-4 ring-emerald-200/80 dark:ring-emerald-900/70 transition"
+        >
+          <PlusCircle className="w-5 h-5" />
+          <span>Publicar</span>
+        </button>
+      )}
+
       {profileModalOpen && (
         <ProfileModal
           targetProfile={profile}

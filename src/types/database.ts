@@ -44,6 +44,7 @@ export interface CondoSettings {
   condo_name: string;
   invite_code: string;
   admin_whatsapp?: string;
+  open_access_until?: string | null;
   updated_at: string;
 }
 

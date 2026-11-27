@@ -12,6 +12,7 @@ create table if not exists public.condo_settings (
   condo_name text not null default 'Mi Condominio',
   invite_code text not null default 'CONDO2026',
   admin_whatsapp text not null default '',
+  open_access_until timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -150,12 +151,19 @@ as $$
 declare
   v_invite_code text;
   v_expected_code text;
+  v_open_until timestamptz;
+  v_initial_status text;
   v_code_row public.invite_codes%rowtype;
   v_full_name text;
   v_unit text;
   v_whatsapp text;
 begin
   v_invite_code := trim(coalesce(new.raw_user_meta_data->>'invite_code', ''));
+
+  select invite_code, open_access_until
+  into v_expected_code, v_open_until
+  from public.condo_settings
+  where id = 1;
 
   select * into v_code_row
   from public.invite_codes
@@ -171,7 +179,6 @@ begin
     set uses_count = uses_count + 1
     where id = v_code_row.id;
   else
-    select invite_code into v_expected_code from public.condo_settings where id = 1;
     if v_expected_code is null or upper(v_invite_code) <> upper(trim(v_expected_code)) then
       raise exception 'Código de invitación del condominio inválido.';
     end if;
@@ -191,8 +198,15 @@ begin
     raise exception 'Número de WhatsApp inválido. Ejemplo: +56912345678';
   end if;
 
+  -- Si el Admin activó "Acceso Libre", aprueba automáticamente; si no, queda pending
+  if v_open_until is not null and v_open_until > now() then
+    v_initial_status := 'approved';
+  else
+    v_initial_status := 'pending';
+  end if;
+
   insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status)
-  values (new.id, coalesce(new.email, ''), v_full_name, v_unit, v_whatsapp, 'resident', 'pending');
+  values (new.id, coalesce(new.email, ''), v_full_name, v_unit, v_whatsapp, 'resident', v_initial_status);
 
   return new;
 end;
