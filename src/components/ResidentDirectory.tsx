@@ -201,6 +201,11 @@ export function ResidentDirectory({
                 Admin
               </span>
             )}
+            {u.role === 'viewer' && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300">
+                Solo Comprador
+              </span>
+            )}
             {u.status === 'suspended' && (
               <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300">
                 Suspendido

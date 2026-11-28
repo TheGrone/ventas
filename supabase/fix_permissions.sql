@@ -51,6 +51,27 @@ begin
     return new;
   end if;
 
+  -- Cuenta comunitaria de solo lectura/compra (sin datos personales, no puede publicar ni editar perfil)
+  if lower(trim(coalesce(new.email, ''))) = 'vecino@condominio.cl' then
+    insert into public.profiles (id, email, full_name, unit_number, whatsapp, role, status, terms_accepted_at)
+    values (
+      new.id,
+      coalesce(new.email, 'vecino@condominio.cl'),
+      'Cuenta Comunitaria',
+      'Cuenta Comunitaria',
+      '+56900000000',
+      'viewer',
+      'approved',
+      now()
+    )
+    on conflict (id) do update
+      set role = 'viewer',
+          status = 'approved',
+          unit_number = 'Cuenta Comunitaria',
+          terms_accepted_at = coalesce(public.profiles.terms_accepted_at, now());
+    return new;
+  end if;
+
   select invite_code, open_access_until
   into v_expected_code, v_open_until
   from public.condo_settings
@@ -189,12 +210,29 @@ $$;
 
 grant execute on function public.get_support_contacts() to authenticated;
 
--- 4. Eliminar trigger antiguo si existía, permitir rol 'super_admin' y blindar edición de datos personales de terceros
+-- 4. Eliminar trigger antiguo si existía, permitir roles 'viewer' y 'super_admin' y blindar datos personales
 drop trigger if exists trg_enforce_single_admin on public.profiles;
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles
   add constraint profiles_role_check
-  check (role in ('resident', 'admin', 'super_admin'));
+  check (role in ('viewer', 'resident', 'admin', 'super_admin'));
+
+create or replace function public.is_seller()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role in ('resident', 'admin', 'super_admin')
+      and status = 'approved'
+  );
+$$;
+
+grant execute on function public.is_seller() to authenticated;
 
 create or replace function public.is_admin()
 returns boolean
@@ -241,6 +279,11 @@ begin
   end if;
 
   if not public.is_super_admin() then
+    -- La cuenta comunitaria (viewer) es 100% solo lectura: nadie puede alterarla salvo Super Admin
+    if old.role = 'viewer' and not public.is_admin() then
+      raise exception 'La cuenta comunitaria es solo para ver y comprar; no se puede modificar.';
+    end if;
+
     if new.role is distinct from old.role then
       raise exception 'Solo el Super Admin puede cambiar roles.';
     end if;
@@ -353,20 +396,46 @@ $$;
 
 grant execute on function public.admin_delete_user(uuid) to authenticated;
 
--- 5b. Políticas reforzadas en products (vendedor no puede editar anuncios ocultados por Admin)
+-- 5b. Políticas reforzadas en products y storage (cuenta comunitaria 'viewer' NO puede publicar, editar ni borrar)
+drop policy if exists "Vecino aprobado crea sus propios anuncios" on public.products;
+create policy "Vecino aprobado crea sus propios anuncios"
+  on public.products for insert
+  to authenticated
+  with check (
+    public.is_seller()
+    and seller_id = auth.uid()
+    and is_hidden_by_admin = false
+  );
+
 drop policy if exists "Vendedor edita sus propios anuncios" on public.products;
 create policy "Vendedor edita sus propios anuncios"
   on public.products for update
   to authenticated
   using (
-    public.is_approved_resident()
+    public.is_seller()
     and seller_id = auth.uid()
     and is_hidden_by_admin = false
   )
   with check (
-    public.is_approved_resident()
+    public.is_seller()
     and seller_id = auth.uid()
     and is_hidden_by_admin = false
+  );
+
+drop policy if exists "Vendedor elimina sus propios anuncios" on public.products;
+create policy "Vendedor elimina sus propios anuncios"
+  on public.products for delete
+  to authenticated
+  using (public.is_seller() and seller_id = auth.uid());
+
+drop policy if exists "Vecinos aprobados suben sus imágenes" on storage.objects;
+create policy "Vecinos aprobados suben sus imágenes"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'product-images'
+    and public.is_seller()
+    and (storage.foldername(name))[1] = auth.uid()::text
   );
 
 -- 5c. Funciones de Consentimiento (Ley 19.628 / 21.719) y Derecho a Eliminar Cuenta propia (ARCO)
@@ -402,8 +471,8 @@ begin
   end if;
 
   select role into v_role from public.profiles where id = auth.uid();
-  if v_role = 'super_admin' then
-    raise exception 'La cuenta Super Admin no puede eliminarse desde aquí.';
+  if v_role in ('super_admin', 'viewer') then
+    raise exception 'Esta cuenta no puede eliminarse desde aquí.';
   end if;
 
   delete from auth.users where id = auth.uid();

@@ -150,6 +150,7 @@ export default function App() {
 
   const isAdminUser =
     profile?.role === 'admin' || profile?.role === 'super_admin';
+  const isViewerUser = profile?.role === 'viewer';
 
   const handleDeleteProduct = async (product: Product) => {
     const confirmed = window.confirm(
@@ -278,35 +279,46 @@ export default function App() {
               <h1 className="font-extrabold text-slate-900 dark:text-white leading-tight truncate text-base sm:text-lg">
                 {CONDO_NAME}
               </h1>
-              <button
-                type="button"
-                onClick={() => setProfileModalOpen(true)}
-                title="Editar mis datos"
-                className="text-xs sm:text-sm text-emerald-900/80 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-1 truncate font-medium"
-              >
-                <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span className="truncate underline decoration-dotted">
-                  {profile.full_name}
-                  {!isPrivateUnit(profile.unit_number)
-                    ? ` · ${profile.unit_number}`
-                    : ''}
-                </span>
-              </button>
+              {isViewerUser ? (
+                <p className="text-xs sm:text-sm text-sky-800 dark:text-sky-300 flex items-center gap-1 truncate font-bold">
+                  <UserCheck className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                  <span className="truncate">
+                    Cuenta Comunitaria · Solo ver y comprar
+                  </span>
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setProfileModalOpen(true)}
+                  title="Editar mis datos"
+                  className="text-xs sm:text-sm text-emerald-900/80 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-1 truncate font-medium"
+                >
+                  <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="truncate underline decoration-dotted">
+                    {profile.full_name}
+                    {!isPrivateUnit(profile.unit_number)
+                      ? ` · ${profile.unit_number}`
+                      : ''}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setEditingProduct(null);
-                setModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-sm transition"
-            >
-              <PlusCircle className="w-5 h-5" />
-              <span>Vender</span>
-            </button>
+            {!isViewerUser && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProduct(null);
+                  setModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-sm transition"
+              >
+                <PlusCircle className="w-5 h-5" />
+                <span>Vender</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -318,15 +330,17 @@ export default function App() {
               <span className="hidden sm:inline">Ayuda</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setProfileModalOpen(true)}
-              title="Editar mis datos o contraseña"
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-2xl border border-emerald-300 dark:border-slate-700 bg-emerald-100/70 dark:bg-slate-800 hover:bg-emerald-200/70 dark:hover:bg-slate-700 text-emerald-900 dark:text-emerald-300 text-xs sm:text-sm font-bold transition"
-            >
-              <UserCog className="w-4 h-4" />
-              <span className="hidden sm:inline">Mi Perfil</span>
-            </button>
+            {!isViewerUser && (
+              <button
+                type="button"
+                onClick={() => setProfileModalOpen(true)}
+                title="Editar mis datos o contraseña"
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-2xl border border-emerald-300 dark:border-slate-700 bg-emerald-100/70 dark:bg-slate-800 hover:bg-emerald-200/70 dark:hover:bg-slate-700 text-emerald-900 dark:text-emerald-300 text-xs sm:text-sm font-bold transition"
+              >
+                <UserCog className="w-4 h-4" />
+                <span className="hidden sm:inline">Mi Perfil</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -392,18 +406,20 @@ export default function App() {
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('mine')}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm sm:text-base font-bold rounded-t-xl border-b-3 transition whitespace-nowrap ${
-              activeTab === 'mine'
-                ? 'border-emerald-600 text-emerald-900 dark:text-emerald-400 bg-emerald-100/60 dark:bg-slate-800/70'
-                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Package className="w-5 h-5" />
-            <span>Mis Anuncios</span>
-          </button>
+          {!isViewerUser && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('mine')}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm sm:text-base font-bold rounded-t-xl border-b-3 transition whitespace-nowrap ${
+                activeTab === 'mine'
+                  ? 'border-emerald-600 text-emerald-900 dark:text-emerald-400 bg-emerald-100/60 dark:bg-slate-800/70'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <Package className="w-5 h-5" />
+              <span>Mis Anuncios</span>
+            </button>
+          )}
 
           {isAdminUser && (
             <button
@@ -512,17 +528,19 @@ export default function App() {
                     ? 'Aún no has publicado ningún anuncio.'
                     : 'No hay productos en esta sección todavía.'}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingProduct(null);
-                    setModalOpen(true);
-                  }}
-                  className="mt-4 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold shadow-sm"
-                >
-                  <PlusCircle className="w-5 h-5" />
-                  <span>Publicar mi producto</span>
-                </button>
+                {!isViewerUser && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProduct(null);
+                      setModalOpen(true);
+                    }}
+                    className="mt-4 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold shadow-sm"
+                  >
+                    <PlusCircle className="w-5 h-5" />
+                    <span>Publicar mi producto</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
@@ -562,7 +580,7 @@ export default function App() {
         </div>
       </footer>
 
-      {modalOpen && (
+      {!isViewerUser && modalOpen && (
         <ProductModal
           categories={categories}
           sellerId={profile.id}
@@ -574,7 +592,7 @@ export default function App() {
       )}
 
       {/* Botón flotante rápido en móvil para publicar en 1 toque */}
-      {activeTab !== 'admin' && !modalOpen && !profileModalOpen && (
+      {!isViewerUser && activeTab !== 'admin' && !modalOpen && !profileModalOpen && (
         <button
           type="button"
           onClick={() => {

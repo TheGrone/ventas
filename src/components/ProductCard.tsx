@@ -40,6 +40,7 @@ export function ProductCard({
   const [imgIndex, setImgIndex] = useState(0);
 
   const isOwner = product.seller_id === currentUser.id;
+  const isViewer = currentUser.role === 'viewer';
   const isAdmin =
     currentUser.role === 'admin' || currentUser.role === 'super_admin';
   const isProxyListing = Boolean(product.contact_whatsapp);
@@ -74,11 +75,14 @@ export function ProductCard({
         product.title,
         product.price_clp,
         displayName,
-        currentUser.full_name
+        currentUser.full_name,
+        isViewer
       )
     : '#';
 
-  const showWhatsAppButton = Boolean(displayPhone && (!isOwner || isProxyListing));
+  const showWhatsAppButton = Boolean(
+    displayPhone && (isViewer || !isOwner || isProxyListing)
+  );
 
   return (
     <article
@@ -227,7 +231,7 @@ export function ProductCard({
               </a>
             )}
 
-            {(isOwner || (isAdmin && isProxyListing)) && (
+            {!isViewer && (isOwner || (isAdmin && isProxyListing)) && (
               <button
                 type="button"
                 onClick={() => onEdit(product)}
@@ -258,7 +262,7 @@ export function ProductCard({
               </button>
             )}
 
-            {(isOwner || isAdmin) && (
+            {!isViewer && (isOwner || isAdmin) && (
               <button
                 type="button"
                 onClick={() => onDelete(product)}

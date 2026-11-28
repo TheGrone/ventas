@@ -50,10 +50,14 @@ export function buildWhatsAppUrl(
   productTitle: string,
   priceClp: number,
   sellerName: string,
-  buyerName: string
+  buyerName: string,
+  isViewerAccount = false
 ): string {
   const phone = normalizeWhatsApp(rawPhone);
-  const message = `Hola ${sellerName}, buenas. Soy ${buyerName} (vecino del condominio) y me interesa tu anuncio: "${productTitle}" (${formatCLP(priceClp)}). ¿Sigue disponible? Muchas gracias.`;
+  const intro = isViewerAccount
+    ? 'Te escribo desde la tienda del condominio'
+    : `Soy ${buyerName} (vecino del condominio)`;
+  const message = `Hola ${sellerName}, buenas. ${intro} y me interesa tu anuncio: "${productTitle}" (${formatCLP(priceClp)}). ¿Sigue disponible? Muchas gracias.`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 

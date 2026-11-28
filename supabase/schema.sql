@@ -30,7 +30,7 @@ create table if not exists public.profiles (
   full_name text not null check (char_length(trim(full_name)) between 2 and 80),
   unit_number text not null check (char_length(trim(unit_number)) between 1 and 30),
   whatsapp text not null check (whatsapp ~ '^\+?[0-9]{8,15}$'),
-  role text not null default 'resident' check (role in ('resident', 'admin', 'super_admin')),
+  role text not null default 'resident' check (role in ('viewer', 'resident', 'admin', 'super_admin')),
   status text not null default 'pending' check (status in ('pending', 'approved', 'suspended')),
   terms_accepted_at timestamptz,
   created_at timestamptz not null default now(),
@@ -80,6 +80,21 @@ as $$
   select exists (
     select 1 from public.profiles
     where id = auth.uid()
+      and status = 'approved'
+  );
+$$;
+
+create or replace function public.is_seller()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role in ('resident', 'admin', 'super_admin')
       and status = 'approved'
   );
 $$;
