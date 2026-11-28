@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   HelpCircle,
   LogOut,
+  Megaphone,
   Moon,
   Package,
+  Pin,
   PlusCircle,
   Search,
   ShieldCheck,
@@ -16,6 +18,7 @@ import {
 import { AdminPanel } from './components/AdminPanel';
 import { AuthScreen } from './components/AuthScreen';
 import { CategoryCarousel } from './components/CategoryCarousel';
+import { CommunityNoticesPanel } from './components/CommunityNoticesPanel';
 import { ConsentModal } from './components/ConsentModal';
 import { PendingApprovalScreen } from './components/PendingApprovalScreen';
 import { ProductCard } from './components/ProductCard';
@@ -26,10 +29,16 @@ import { SetupGuideBanner } from './components/SetupGuideBanner';
 import { SupportModal } from './components/SupportModal';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
+import { isPrivateUnit } from './lib/format';
 import { CONDO_NAME, isSupabaseConfigured, supabase } from './lib/supabase';
-import type { Category, Product, SupportContact } from './types/database';
+import type {
+  Category,
+  CommunityNotice,
+  Product,
+  SupportContact,
+} from './types/database';
 
-type ActiveTab = 'catalog' | 'mine' | 'admin';
+type ActiveTab = 'catalog' | 'notices' | 'mine' | 'admin';
 
 export default function App() {
   const { theme, toggleTheme } = useTheme();
@@ -49,10 +58,10 @@ export default function App() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [notices, setNotices] = useState<CommunityNotice[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [dataLoading, setDataLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedTower, setSelectedTower] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ActiveTab>('catalog');
   const [modalOpen, setModalOpen] = useState(false);
@@ -66,22 +75,34 @@ export default function App() {
     if (!profile || profile.status !== 'approved') return;
     setDataLoading(true);
 
-    const [{ data: cats }, { data: prods }] = await Promise.all([
+    const adminFlag = profile.role === 'admin' || profile.role === 'super_admin';
+    // Privacidad: solo Admin recibe unit_number del vendedor; vecinos normales solo reciben nombre y WhatsApp
+    const sellerFields = adminFlag
+      ? 'id, full_name, unit_number, whatsapp'
+      : 'id, full_name, whatsapp';
+
+    const [{ data: cats }, { data: prods }, { data: noticesData }] = await Promise.all([
       supabase.from('categories').select('*').order('sort_order', { ascending: true }),
       supabase
         .from('products')
         .select(
           `
           *,
-          seller:profiles!seller_id(id, full_name, unit_number, whatsapp),
+          seller:profiles!seller_id(${sellerFields}),
           category:categories!category_id(id, name, icon)
         `
         )
         .order('created_at', { ascending: false }),
+      supabase
+        .from('community_notices')
+        .select('*')
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false }),
     ]);
 
     if (cats) setCategories(cats as Category[]);
-    if (prods) setProducts(prods as Product[]);
+    if (prods) setProducts(prods as unknown as Product[]);
+    if (noticesData) setNotices(noticesData as CommunityNotice[]);
 
     const { data: supportData } = await supabase.rpc('get_support_contacts');
     if (Array.isArray(supportData) && supportData.length > 0) {
@@ -89,7 +110,7 @@ export default function App() {
       setPrimarySupportPhone(first.whatsapp || '');
     }
 
-    if (profile.role === 'admin' || profile.role === 'super_admin') {
+    if (adminFlag) {
       const { count } = await supabase
         .from('profiles')
         .select('id', { count: 'exact', head: true })
@@ -110,21 +131,22 @@ export default function App() {
       if (selectedCategory !== 'all' && p.category_id !== selectedCategory) {
         return false;
       }
-      if (selectedTower !== 'all') {
-        const unit = p.seller?.unit_number || '';
-        if (!unit.startsWith(`Torre ${selectedTower} `)) return false;
-      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = p.title.toLowerCase().includes(q);
         const matchesDesc = p.description.toLowerCase().includes(q);
-        const matchesSeller = p.seller?.full_name.toLowerCase().includes(q);
-        const matchesUnit = p.seller?.unit_number.toLowerCase().includes(q);
-        return matchesTitle || matchesDesc || matchesSeller || matchesUnit;
+        const displaySeller = (p.contact_name || p.seller?.full_name || '').toLowerCase();
+        const matchesSeller = displaySeller.includes(q);
+        return matchesTitle || matchesDesc || matchesSeller;
       }
       return true;
     });
-  }, [products, activeTab, profile?.id, selectedCategory, selectedTower, searchQuery]);
+  }, [products, activeTab, profile?.id, selectedCategory, searchQuery]);
+
+  const pinnedNotices = useMemo(
+    () => notices.filter((n) => n.is_pinned),
+    [notices]
+  );
 
   const isAdminUser =
     profile?.role === 'admin' || profile?.role === 'super_admin';
@@ -264,7 +286,10 @@ export default function App() {
               >
                 <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span className="truncate underline decoration-dotted">
-                  {profile.full_name} · {profile.unit_number}
+                  {profile.full_name}
+                  {!isPrivateUnit(profile.unit_number)
+                    ? ` · ${profile.unit_number}`
+                    : ''}
                 </span>
               </button>
             </div>
@@ -351,6 +376,24 @@ export default function App() {
 
           <button
             type="button"
+            onClick={() => setActiveTab('notices')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm sm:text-base font-bold rounded-t-xl border-b-3 transition whitespace-nowrap ${
+              activeTab === 'notices'
+                ? 'border-emerald-600 text-emerald-900 dark:text-emerald-400 bg-emerald-100/60 dark:bg-slate-800/70'
+                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Megaphone className="w-5 h-5" />
+            <span>Avisos</span>
+            {notices.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-emerald-600 text-white">
+                {notices.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('mine')}
             className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm sm:text-base font-bold rounded-t-xl border-b-3 transition whitespace-nowrap ${
               activeTab === 'mine'
@@ -393,37 +436,62 @@ export default function App() {
             adminId={profile.id}
             adminRole={profile.role}
             categories={categories}
+            notices={notices}
             onDataChanged={loadMarketData}
+          />
+        ) : activeTab === 'notices' ? (
+          <CommunityNoticesPanel
+            notices={notices}
+            canManage={isAdminUser}
+            authorId={profile.id}
+            onChanged={loadMarketData}
           />
         ) : (
           <>
-            {/* Search, Tower & Category Carousel */}
-            <div className="space-y-4 mb-6">
-              <div className="flex flex-col sm:flex-row gap-2.5">
-                <div className="relative flex-1">
-                  <Search className="w-5 h-5 text-emerald-600 dark:text-slate-400 absolute left-3.5 top-3" />
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar producto, comida, vecino o torre..."
-                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-emerald-50/95 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+            {/* Banner de Avisos Fijados de la Comunidad */}
+            {activeTab === 'catalog' && pinnedNotices.length > 0 && (
+              <div className="mb-5 space-y-2">
+                {pinnedNotices.slice(0, 2).map((n) => (
+                  <div
+                    key={n.id}
+                    className={`rounded-2xl border-2 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs ${
+                      n.notice_type === 'importante'
+                        ? 'bg-amber-100/90 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100'
+                        : 'bg-emerald-50/95 dark:bg-slate-900 border-emerald-300 dark:border-emerald-800 text-slate-900 dark:text-slate-100'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-sm sm:text-base flex items-center gap-1.5">
+                        <Pin className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="truncate">{n.title}</span>
+                      </p>
+                      <p className="text-xs sm:text-sm opacity-90 line-clamp-2 mt-0.5">
+                        {n.content}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('notices')}
+                      className="text-xs font-extrabold underline shrink-0 self-start sm:self-center"
+                    >
+                      Ver avisos
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
-                <select
-                  value={selectedTower}
-                  onChange={(e) => setSelectedTower(e.target.value)}
-                  aria-label="Filtrar por torre"
-                  className="px-4 py-3 rounded-2xl bg-emerald-50/95 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 text-base font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="all">🏢 Todas las torres (1-11)</option>
-                  {Array.from({ length: 11 }, (_, i) => i + 1).map((t) => (
-                    <option key={t} value={String(t)}>
-                      🏢 Torre {t}
-                    </option>
-                  ))}
-                </select>
+            {/* Buscador y Carrusel de Categorías (sin filtro por torre para cuidar privacidad) */}
+            <div className="space-y-4 mb-6">
+              <div className="relative">
+                <Search className="w-5 h-5 text-emerald-600 dark:text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar producto, comida, servicio o nombre..."
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl bg-emerald-50/95 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
 
               <CategoryCarousel
@@ -498,6 +566,7 @@ export default function App() {
         <ProductModal
           categories={categories}
           sellerId={profile.id}
+          isAdmin={isAdminUser}
           editingProduct={editingProduct}
           onClose={() => setModalOpen(false)}
           onSaved={loadMarketData}

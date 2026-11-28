@@ -7,6 +7,7 @@ import {
   FolderPlus,
   KeyRound,
   Lock,
+  Megaphone,
   MessageCircle,
   Pencil,
   Phone,
@@ -23,12 +24,14 @@ import { formatDateTimeCL, isValidWhatsApp, normalizeWhatsApp } from '../lib/for
 import { supabase } from '../lib/supabase';
 import type {
   Category,
+  CommunityNotice,
   CondoSettings,
   InviteCode,
   Profile,
   SupportContact,
   UserRole,
 } from '../types/database';
+import { CommunityNoticesPanel } from './CommunityNoticesPanel';
 import { ProfileModal } from './ProfileModal';
 import { ResidentDirectory } from './ResidentDirectory';
 
@@ -36,15 +39,17 @@ interface AdminPanelProps {
   adminId: string;
   adminRole: UserRole;
   categories: Category[];
+  notices: CommunityNotice[];
   onDataChanged: () => Promise<void>;
 }
 
-type AdminSection = 'residents' | 'codes' | 'support';
+type AdminSection = 'residents' | 'notices' | 'codes' | 'support';
 
 export function AdminPanel({
   adminId,
   adminRole,
   categories,
+  notices,
   onDataChanged,
 }: AdminPanelProps) {
   const isSuperAdmin = adminRole === 'super_admin';
@@ -524,6 +529,19 @@ export function AdminPanel({
 
         <button
           type="button"
+          onClick={() => setSection('notices')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap transition ${
+            section === 'notices'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-emerald-50 dark:bg-slate-900 border border-emerald-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Megaphone className="w-4 h-4" />
+          <span>Avisos Comunidad ({notices.length})</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setSection('codes')}
           className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap transition ${
             section === 'codes'
@@ -785,6 +803,15 @@ export function AdminPanel({
             onDeleteUser={handleDeleteUser}
           />
         </div>
+      )}
+
+      {section === 'notices' && (
+        <CommunityNoticesPanel
+          notices={notices}
+          canManage={true}
+          authorId={adminId}
+          onChanged={onDataChanged}
+        />
       )}
 
       {section === 'codes' && (

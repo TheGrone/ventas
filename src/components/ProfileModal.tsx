@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { CheckCircle2, Lock, Phone, Trash2, User, X } from 'lucide-react';
-import { isValidWhatsApp, normalizeWhatsApp, parseUnitNumber } from '../lib/format';
+import {
+  isPrivateUnit,
+  isValidWhatsApp,
+  normalizeWhatsApp,
+  parseUnitNumber,
+} from '../lib/format';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types/database';
 
@@ -29,6 +34,9 @@ export function ProfileModal({
     targetProfile.unit_number === 'Administración';
 
   const [fullName, setFullName] = useState(targetProfile.full_name);
+  const [includeUnit, setIncludeUnit] = useState(
+    !isAdminAccount && !isPrivateUnit(targetProfile.unit_number)
+  );
   const [tower, setTower] = useState(initialUnit.tower);
   const [floor, setFloor] = useState(initialUnit.floor);
   const [apt, setApt] = useState(initialUnit.apt);
@@ -68,7 +76,9 @@ export function ProfileModal({
 
   const formattedUnit = isAdminAccount
     ? 'Administración'
-    : `Torre ${tower} - Depto ${floor}0${apt}`;
+    : includeUnit
+      ? `Torre ${tower} - Depto ${floor}0${apt}`
+      : 'Privado';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -194,51 +204,70 @@ export function ProfileModal({
           </div>
 
           {!isAdminAccount && (
-            <div>
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
-                Torre / Piso / Depto
+            <div className="p-3 rounded-2xl bg-emerald-100/50 dark:bg-slate-800/70 border border-emerald-200 dark:border-slate-700 space-y-2.5">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeUnit}
+                  onChange={(e) => setIncludeUnit(e.target.checked)}
+                  className="w-4 h-4 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Indicar Torre y Depto (opcional — solo visible para Admin)
+                </span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <select
-                  value={tower}
-                  onChange={(e) => setTower(Number(e.target.value))}
-                  aria-label="Torre"
-                  className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  {TOWERS.map((t) => (
-                    <option key={t} value={t}>
-                      Torre {t}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={floor}
-                  onChange={(e) => setFloor(Number(e.target.value))}
-                  aria-label="Piso"
-                  className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  {FLOORS.map((f) => (
-                    <option key={f} value={f}>
-                      Piso {f}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={apt}
-                  onChange={(e) => setApt(Number(e.target.value))}
-                  aria-label="Departamento"
-                  className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  {APTS.map((a) => (
-                    <option key={a} value={a}>
-                      Depto {floor}0{a}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <p className="text-xs text-emerald-800 dark:text-emerald-400 mt-1">
-                Ubicación seleccionada: <strong>{formattedUnit}</strong>
-              </p>
+
+              {includeUnit ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <select
+                      value={tower}
+                      onChange={(e) => setTower(Number(e.target.value))}
+                      aria-label="Torre"
+                      className="px-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {TOWERS.map((t) => (
+                        <option key={t} value={t}>
+                          Torre {t}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={floor}
+                      onChange={(e) => setFloor(Number(e.target.value))}
+                      aria-label="Piso"
+                      className="px-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {FLOORS.map((f) => (
+                        <option key={f} value={f}>
+                          Piso {f}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={apt}
+                      onChange={(e) => setApt(Number(e.target.value))}
+                      aria-label="Departamento"
+                      className="px-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {APTS.map((a) => (
+                        <option key={a} value={a}>
+                          Depto {floor}0{a}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400">
+                    Solo la administración verá: <strong>{formattedUnit}</strong>. Nunca se
+                    muestra en tus anuncios.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Ubicación guardada como <strong>Privado</strong>. Solo se mostrará tu
+                  Nombre y WhatsApp.
+                </p>
+              )}
             </div>
           )}
 

@@ -29,18 +29,31 @@ export function isValidWhatsApp(raw: string): boolean {
 }
 
 /**
- * Genera el enlace seguro wa.me con mensaje formal y amable indicando Torre y Depto del comprador.
+ * Indica si la ubicación del usuario está en modo privado / sin torre.
+ */
+export function isPrivateUnit(unitNumber: string | null | undefined): boolean {
+  if (!unitNumber) return true;
+  const normalized = unitNumber.trim().toLowerCase();
+  return (
+    normalized === '' ||
+    normalized === 'privado' ||
+    normalized === 'condominio' ||
+    normalized === 'no especificado'
+  );
+}
+
+/**
+ * Genera el enlace seguro wa.me con mensaje formal y amable SIN exponer Torre ni Depto.
  */
 export function buildWhatsAppUrl(
   rawPhone: string,
   productTitle: string,
   priceClp: number,
   sellerName: string,
-  buyerName: string,
-  buyerUnit: string
+  buyerName: string
 ): string {
   const phone = normalizeWhatsApp(rawPhone);
-  const message = `Hola ${sellerName}, buenas. Soy ${buyerName} de ${buyerUnit} (del condominio) y me interesa tu anuncio: "${productTitle}" (${formatCLP(priceClp)}). ¿Sigue disponible? Muchas gracias.`;
+  const message = `Hola ${sellerName}, buenas. Soy ${buyerName} (vecino del condominio) y me interesa tu anuncio: "${productTitle}" (${formatCLP(priceClp)}). ¿Sigue disponible? Muchas gracias.`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 

@@ -31,13 +31,30 @@ export interface Product {
   price_clp: number;
   image_url: string | null;
   images?: string[];
+  contact_name?: string | null;
+  contact_whatsapp?: string | null;
+  contact_unit?: string | null;
   is_available: boolean;
   is_hidden_by_admin: boolean;
   moderation_note: string | null;
   created_at: string;
   updated_at: string;
-  seller?: Pick<Profile, 'id' | 'full_name' | 'unit_number' | 'whatsapp'>;
+  seller?: Pick<Profile, 'id' | 'full_name' | 'whatsapp'> & {
+    unit_number?: string;
+  };
   category?: Pick<Category, 'id' | 'name' | 'icon'>;
+}
+
+export type NoticeType = 'info' | 'importante' | 'evento';
+
+export interface CommunityNotice {
+  id: string;
+  author_id: string | null;
+  title: string;
+  content: string;
+  notice_type: NoticeType;
+  is_pinned: boolean;
+  created_at: string;
 }
 
 export interface SupportContact {

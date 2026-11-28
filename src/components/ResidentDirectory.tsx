@@ -32,7 +32,7 @@ function getTowerKey(unitNumber: string): string {
   const match = unitNumber.match(/Torre\s*(\d+)/i);
   if (match) return `Torre ${Number(match[1])}`;
   if (unitNumber.toLowerCase().includes('administr')) return 'Administración';
-  return 'Otros';
+  return 'Sin torre (Privado)';
 }
 
 function getTowerSortOrder(key: string): number {
@@ -371,6 +371,11 @@ export function ResidentDirectory({
               🏢 {t} ({towerCounts[t] ?? 0})
             </option>
           ))}
+          {(towerCounts['Sin torre (Privado)'] ?? 0) > 0 && (
+            <option value="Sin torre (Privado)">
+              🔒 Sin torre / Privado ({towerCounts['Sin torre (Privado)']})
+            </option>
+          )}
           {(towerCounts['Administración'] ?? 0) > 0 && (
             <option value="Administración">
               🛡️ Administración ({towerCounts['Administración']})

@@ -47,6 +47,7 @@ export function AuthScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [includeUnit, setIncludeUnit] = useState(false);
   const [tower, setTower] = useState(1);
   const [floor, setFloor] = useState(1);
   const [apt, setApt] = useState(1);
@@ -58,7 +59,9 @@ export function AuthScreen({
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const formattedUnit = `Torre ${tower} - Depto ${floor}0${apt}`;
+  const formattedUnit = includeUnit
+    ? `Torre ${tower} - Depto ${floor}0${apt}`
+    : 'Privado';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -263,51 +266,69 @@ export function AuthScreen({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  ¿En qué Torre y Depto vives?
+              <div className="p-3 rounded-2xl bg-emerald-100/50 dark:bg-slate-800/70 border border-emerald-200 dark:border-slate-700 space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeUnit}
+                    onChange={(e) => setIncludeUnit(e.target.checked)}
+                    className="w-4 h-4 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Indicar Torre y Depto (opcional — solo visible para Admin)
+                  </span>
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <select
-                    value={tower}
-                    onChange={(e) => setTower(Number(e.target.value))}
-                    aria-label="Torre"
-                    className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    {TOWERS.map((t) => (
-                      <option key={t} value={t}>
-                        Torre {t}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={floor}
-                    onChange={(e) => setFloor(Number(e.target.value))}
-                    aria-label="Piso"
-                    className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    {FLOORS.map((f) => (
-                      <option key={f} value={f}>
-                        Piso {f}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={apt}
-                    onChange={(e) => setApt(Number(e.target.value))}
-                    aria-label="Departamento"
-                    className="px-2 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    {APTS.map((a) => (
-                      <option key={a} value={a}>
-                        Depto {floor}0{a}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <p className="text-xs text-emerald-800 dark:text-emerald-400 mt-1">
-                  Quedarás registrado como: <strong>{formattedUnit}</strong>
-                </p>
+
+                {includeUnit ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        value={tower}
+                        onChange={(e) => setTower(Number(e.target.value))}
+                        aria-label="Torre"
+                        className="px-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {TOWERS.map((t) => (
+                          <option key={t} value={t}>
+                            Torre {t}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={floor}
+                        onChange={(e) => setFloor(Number(e.target.value))}
+                        aria-label="Piso"
+                        className="px-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {FLOORS.map((f) => (
+                          <option key={f} value={f}>
+                            Piso {f}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={apt}
+                        onChange={(e) => setApt(Number(e.target.value))}
+                        aria-label="Departamento"
+                        className="px-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-slate-900 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {APTS.map((a) => (
+                          <option key={a} value={a}>
+                            Depto {floor}0{a}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-xs text-emerald-800 dark:text-emerald-400">
+                      Solo la administración verá: <strong>{formattedUnit}</strong>. En tus
+                      anuncios nunca se mostrará tu torre ni depto.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Tu torre y depto quedarán en privado; solo se usará tu Nombre y WhatsApp.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -393,9 +414,9 @@ export function AuthScreen({
                   className="mt-0.5 w-5 h-5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 shrink-0"
                 />
                 <span className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 leading-snug">
-                  Doy mi consentimiento para compartir mi Nombre, Torre/Depto y WhatsApp
-                  solo con vecinos verificados del condominio y acepto las normas de buen
-                  uso.
+                  Doy mi consentimiento para compartir mi Nombre y WhatsApp solo con
+                  vecinos verificados del condominio (sin mostrar torre ni depto) y acepto
+                  las normas de buen uso.
                 </span>
               </label>
               <button

@@ -6,6 +6,7 @@ import {
   Eye,
   EyeOff,
   Flag,
+  Lock,
   MessageCircle,
   Pencil,
   Trash2,
@@ -14,6 +15,7 @@ import {
   buildReportProductWhatsAppUrl,
   buildWhatsAppUrl,
   formatCLP,
+  isPrivateUnit,
   isSafeImageUrl,
 } from '../lib/format';
 import type { Product, Profile } from '../types/database';
@@ -40,9 +42,19 @@ export function ProductCard({
   const isOwner = product.seller_id === currentUser.id;
   const isAdmin =
     currentUser.role === 'admin' || currentUser.role === 'super_admin';
-  const sellerName = product.seller?.full_name || 'Vecino';
-  const sellerUnit = product.seller?.unit_number || 'Torre / Depto';
-  const sellerPhone = product.seller?.whatsapp || '';
+  const isProxyListing = Boolean(product.contact_whatsapp);
+
+  // Privacidad: nunca mostrar torre ni depto a otros vecinos (solo Nombre + WhatsApp)
+  const displayName =
+    product.contact_name?.trim() || product.seller?.full_name || 'Vecino';
+  const displayPhone =
+    product.contact_whatsapp?.trim() || product.seller?.whatsapp || '';
+
+  // Torre/Depto solo visible para Admin (nunca para vecinos normales)
+  const adminOnlyUnit =
+    isAdmin && !isProxyListing && !isPrivateUnit(product.seller?.unit_number)
+      ? product.seller?.unit_number
+      : null;
 
   const gallery = (() => {
     if (product.images && product.images.length > 0) {
@@ -56,16 +68,17 @@ export function ProductCard({
 
   const safeIndex = gallery.length > 0 ? imgIndex % gallery.length : 0;
 
-  const whatsappHref = sellerPhone
+  const whatsappHref = displayPhone
     ? buildWhatsAppUrl(
-        sellerPhone,
+        displayPhone,
         product.title,
         product.price_clp,
-        sellerName,
-        currentUser.full_name,
-        currentUser.unit_number
+        displayName,
+        currentUser.full_name
       )
     : '#';
+
+  const showWhatsAppButton = Boolean(displayPhone && (!isOwner || isProxyListing));
 
   return (
     <article
@@ -158,19 +171,32 @@ export function ProductCard({
         )}
 
         <div className="mt-auto pt-4 space-y-3">
-          <div className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300 bg-emerald-100/70 dark:bg-slate-800/80 px-3 py-2 rounded-xl">
-            <BadgeCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="font-bold text-slate-900 dark:text-slate-100 truncate">
-              {sellerName}
-            </span>
-            <span>·</span>
-            <span className="shrink-0 font-bold text-emerald-800 dark:text-emerald-300">
-              {sellerUnit}
-            </span>
+          {/* Solo Nombre del vecino (nunca torre/depto para vecinos normales) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2 text-sm text-slate-700 dark:text-slate-300 bg-emerald-100/70 dark:bg-slate-800/80 px-3 py-2 rounded-xl">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <BadgeCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                  {displayName}
+                </span>
+              </div>
+              {isProxyListing && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 shrink-0">
+                  Vía Admin
+                </span>
+              )}
+            </div>
+
+            {adminOnlyUnit && (
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-800 dark:text-purple-300 px-2">
+                <Lock className="w-3 h-3 shrink-0" />
+                <span>Solo Admin ve: {adminOnlyUnit}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {sellerPhone && !isOwner && (
+            {showWhatsAppButton && (
               <a
                 href={whatsappHref}
                 target="_blank"
@@ -187,8 +213,8 @@ export function ProductCard({
                 href={buildReportProductWhatsAppUrl(
                   supportPhone,
                   product.title,
-                  sellerName,
-                  sellerUnit,
+                  displayName,
+                  'Condominio',
                   currentUser.full_name,
                   currentUser.unit_number
                 )}
@@ -201,7 +227,7 @@ export function ProductCard({
               </a>
             )}
 
-            {isOwner && (
+            {(isOwner || (isAdmin && isProxyListing)) && (
               <button
                 type="button"
                 onClick={() => onEdit(product)}

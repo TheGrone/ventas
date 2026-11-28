@@ -1,12 +1,23 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { Camera, ChevronDown, ChevronUp, Trash2, X, Zap } from 'lucide-react';
+import {
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  Phone,
+  Trash2,
+  User,
+  Users,
+  X,
+  Zap,
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { isSafeImageUrl } from '../lib/format';
+import { isSafeImageUrl, isValidWhatsApp, normalizeWhatsApp } from '../lib/format';
 import type { Category, Product } from '../types/database';
 
 interface ProductModalProps {
   categories: Category[];
   sellerId: string;
+  isAdmin: boolean;
   editingProduct: Product | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
@@ -41,6 +52,7 @@ function getDefaultCategoryId(
 export function ProductModal({
   categories,
   sellerId,
+  isAdmin,
   editingProduct,
   onClose,
   onSaved,
@@ -60,6 +72,16 @@ export function ProductModal({
   const [images, setImages] = useState<string[]>(() =>
     getInitialImages(editingProduct)
   );
+
+  // Publicar a nombre de un vecino (solo Admin, ej: anuncios sacados del grupo de WhatsApp)
+  const [publishOnBehalf, setPublishOnBehalf] = useState(
+    Boolean(editingProduct?.contact_whatsapp || editingProduct?.contact_name)
+  );
+  const [contactName, setContactName] = useState(editingProduct?.contact_name ?? '');
+  const [contactWhatsapp, setContactWhatsapp] = useState(
+    editingProduct?.contact_whatsapp ?? '+569'
+  );
+
   const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +118,6 @@ export function ProductModal({
 
     setUploadingImage(true);
     try {
-      // Subida en paralelo para máxima velocidad
       const uploadedUrls = await Promise.all(
         selected.map(async (file) => {
           const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
@@ -146,6 +167,17 @@ export function ProductModal({
       return;
     }
 
+    if (isAdmin && publishOnBehalf) {
+      if (contactName.trim().length < 2) {
+        setError('Escribe el nombre del vecino vendedor.');
+        return;
+      }
+      if (!isValidWhatsApp(contactWhatsapp)) {
+        setError('Ingresa un WhatsApp válido del vendedor (ej: +56912345678).');
+        return;
+      }
+    }
+
     const safeImages = images.filter((u) => isSafeImageUrl(u)).slice(0, MAX_IMAGES);
 
     setSaving(true);
@@ -153,7 +185,7 @@ export function ProductModal({
       localStorage.setItem(LAST_CAT_KEY, categoryId);
 
       const payload = {
-        seller_id: sellerId,
+        seller_id: editingProduct?.seller_id ?? sellerId,
         category_id: categoryId,
         title: title.trim(),
         description: description.trim(),
@@ -161,6 +193,13 @@ export function ProductModal({
         image_url: safeImages[0] ?? null,
         images: safeImages,
         is_available: isAvailable,
+        contact_name:
+          isAdmin && publishOnBehalf ? contactName.trim() : null,
+        contact_whatsapp:
+          isAdmin && publishOnBehalf
+            ? `+${normalizeWhatsApp(contactWhatsapp)}`
+            : null,
+        contact_unit: null,
       };
 
       if (editingProduct) {
@@ -216,7 +255,57 @@ export function ProductModal({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          {/* 1. Fotos primero (tocar y listo) */}
+          {/* Opción exclusiva de Admin: publicar a nombre de un vecino (del grupo de WSP) */}
+          {isAdmin && (
+            <div className="p-3.5 rounded-2xl bg-purple-100/70 dark:bg-purple-950/40 border border-purple-300 dark:border-purple-800 space-y-2.5">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={publishOnBehalf}
+                  onChange={(e) => setPublishOnBehalf(e.target.checked)}
+                  className="w-4 h-4 rounded border-purple-400 text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-xs sm:text-sm font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 shrink-0" />
+                  Publicar por un vecino (poner su WhatsApp)
+                </span>
+              </label>
+
+              {publishOnBehalf && (
+                <div className="space-y-2 pt-1">
+                  <div className="relative">
+                    <User className="w-4 h-4 text-purple-600 dark:text-purple-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      required
+                      maxLength={80}
+                      value={contactName}
+                      onChange={(e) => setContactName(e.target.value)}
+                      placeholder="Nombre del vecino (ej: Sra. Carmen)"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/80 dark:bg-slate-900 border border-purple-300 dark:border-purple-700 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-purple-600 dark:text-purple-400 absolute left-3 top-2.5" />
+                    <input
+                      type="tel"
+                      required
+                      value={contactWhatsapp}
+                      onChange={(e) => setContactWhatsapp(e.target.value)}
+                      placeholder="WhatsApp del vecino (+56912345678)"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/80 dark:bg-slate-900 border border-purple-300 dark:border-purple-700 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-purple-900/80 dark:text-purple-300">
+                    El botón de WhatsApp del anuncio enviará directamente al número de
+                    este vecino, sin mostrar torre ni depto.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 1. Fotos primero */}
           <div>
             {images.length < MAX_IMAGES && (
               <label className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-2xl border-2 border-dashed border-emerald-400 dark:border-emerald-700 bg-emerald-100/70 dark:bg-slate-800/80 hover:bg-emerald-200/60 dark:hover:bg-slate-800 text-emerald-900 dark:text-emerald-300 text-sm font-bold cursor-pointer transition">
@@ -268,7 +357,7 @@ export function ProductModal({
           {/* 2. Qué vendes */}
           <div>
             <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
-              ¿Qué vendes?
+              ¿Qué se vende?
             </label>
             <input
               type="text"
@@ -282,7 +371,7 @@ export function ProductModal({
             />
           </div>
 
-          {/* 3. Precio y Sección en la misma fila */}
+          {/* 3. Precio y Sección */}
           <div className="grid grid-cols-2 gap-2.5">
             <div>
               <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
@@ -323,7 +412,7 @@ export function ProductModal({
             </div>
           </div>
 
-          {/* 4. Detalles opcionales colapsables para no alargar el formulario */}
+          {/* 4. Detalles opcionales */}
           <div>
             <button
               type="button"
@@ -367,7 +456,11 @@ export function ProductModal({
             </label>
           )}
 
-          {/* Botón grande directo para publicar */}
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center">
+            Por privacidad, en tu publicación solo aparece tu nombre y botón de WhatsApp
+            (nunca tu torre ni depto).
+          </p>
+
           <button
             type="submit"
             disabled={saving || uploadingImage}

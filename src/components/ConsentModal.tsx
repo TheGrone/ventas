@@ -76,10 +76,13 @@ export function ConsentModal({
             </h3>
             <p className="mt-1">
               Al registrarte y aceptar este consentimiento, autorizas de forma libre y
-              voluntaria que tu <strong>Nombre, Torre/Depto y número de WhatsApp</strong>{' '}
-              sean visibles <strong>únicamente para otros vecinos aprobados del condominio</strong>{' '}
-              con el único fin de coordinar compras o ventas. Tus datos jamás se venden ni
-              se entregan a terceros externos.
+              voluntaria que tu <strong>Nombre y número de WhatsApp</strong> sean visibles{' '}
+              <strong>únicamente para otros vecinos aprobados del condominio</strong> con el
+              único fin de coordinar compras o ventas. Si decides indicar tu{' '}
+              <strong>Torre y Depto</strong> (opcional), ese dato será{' '}
+              <strong>privado y visible únicamente para la Administración</strong> — nunca se
+              muestra en tus publicaciones. Tus datos jamás se venden ni se entregan a
+              terceros externos.
             </p>
           </div>
 
@@ -140,9 +143,9 @@ export function ConsentModal({
                   className="mt-0.5 w-5 h-5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 shrink-0"
                 />
                 <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
-                  He leído y doy mi consentimiento voluntario para mostrar mi Nombre,
-                  Torre/Depto y WhatsApp solo a vecinos verificados del condominio, y
-                  acepto las normas de buen uso.
+                  He leído y doy mi consentimiento voluntario para mostrar mi Nombre y
+                  WhatsApp solo a vecinos verificados del condominio (sin mostrar torre ni
+                  depto en publicaciones), y acepto las normas de buen uso.
                 </span>
               </label>
 
