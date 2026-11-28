@@ -40,7 +40,10 @@ export function ProductCard({
   const [imgIndex, setImgIndex] = useState(0);
 
   const isOwner = product.seller_id === currentUser.id;
-  const isViewer = currentUser.role === 'viewer';
+  const isViewer =
+    currentUser.role === 'viewer' ||
+    currentUser.email?.toLowerCase().trim() === 'vecino@condominio.cl' ||
+    currentUser.unit_number === 'Cuenta Comunitaria';
   const isAdmin =
     currentUser.role === 'admin' || currentUser.role === 'super_admin';
   const isProxyListing = Boolean(product.contact_whatsapp);

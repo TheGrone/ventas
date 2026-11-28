@@ -150,7 +150,10 @@ export default function App() {
 
   const isAdminUser =
     profile?.role === 'admin' || profile?.role === 'super_admin';
-  const isViewerUser = profile?.role === 'viewer';
+  const isViewerUser =
+    profile?.role === 'viewer' ||
+    profile?.email?.toLowerCase().trim() === 'vecino@condominio.cl' ||
+    profile?.unit_number === 'Cuenta Comunitaria';
 
   const handleDeleteProduct = async (product: Product) => {
     const confirmed = window.confirm(

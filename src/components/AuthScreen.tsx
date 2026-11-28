@@ -127,7 +127,7 @@ export function AuthScreen({
           fullName: fullName.trim(),
           unitNumber: formattedUnit,
           whatsapp: `+${normalizeWhatsApp(whatsapp)}`,
-          inviteCode: inviteCode.trim(),
+          inviteCode: inviteCode.trim().toUpperCase(),
           termsAccepted,
         });
         setSuccessMsg(
@@ -357,10 +357,13 @@ export function AuthScreen({
                   <input
                     type="text"
                     required
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value)}
-                    placeholder="Pídelo al administrador"
-                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    placeholder="EJ: CONDO2026"
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-emerald-100/50 dark:bg-slate-800 border-2 border-emerald-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-base uppercase tracking-wider font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
