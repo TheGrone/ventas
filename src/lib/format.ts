@@ -126,6 +126,23 @@ export function buildReportProductWhatsAppUrl(
 }
 
 /**
+ * Extrae el mensaje real de errores de JavaScript o Supabase (PostgrestError / StorageError).
+ */
+export function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    'message' in err &&
+    typeof (err as { message: unknown }).message === 'string' &&
+    (err as { message: string }).message.trim()
+  ) {
+    return (err as { message: string }).message;
+  }
+  return fallback;
+}
+
+/**
  * Valida que una URL de imagen sea HTTPS segura (previene javascript: o data: maliciosos).
  */
 export function isSafeImageUrl(url: string | null | undefined): boolean {

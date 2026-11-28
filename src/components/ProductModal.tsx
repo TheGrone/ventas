@@ -11,7 +11,12 @@ import {
   Zap,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { isSafeImageUrl, isValidWhatsApp, normalizeWhatsApp } from '../lib/format';
+import {
+  getErrorMessage,
+  isSafeImageUrl,
+  isValidWhatsApp,
+  normalizeWhatsApp,
+} from '../lib/format';
 import type { Category, Product } from '../types/database';
 
 interface ProductModalProps {
@@ -24,9 +29,65 @@ interface ProductModalProps {
 }
 
 const MAX_IMAGES = 6;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB por imagen
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB por imagen (límite del bucket)
+const MAX_DIMENSION = 1400;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const LAST_CAT_KEY = 'condomarket-last-category';
+
+/**
+ * Comprime fotos grandes tomadas con celular (ej: 5-10 MB) para que suban rápido
+ * y nunca fallen por el límite de 2 MB en Supabase Storage.
+ */
+async function compressImageIfNeeded(file: File): Promise<File> {
+  if (file.size <= 900 * 1024 && ALLOWED_TYPES.includes(file.type)) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+        const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const baseName = file.name.replace(/\.[^.]+$/, '');
+          resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        0.82
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
 
 function getInitialImages(product: Product | null): string[] {
   if (!product) return [];
@@ -105,22 +166,19 @@ export function ProductModal({
       );
     }
 
-    for (const file of selected) {
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        setError('Solo se permiten imágenes JPG, PNG o WebP.');
-        return;
-      }
-      if (file.size > MAX_IMAGE_BYTES) {
-        setError('Cada imagen debe pesar como máximo 2 MB.');
-        return;
-      }
-    }
-
     setUploadingImage(true);
     try {
       const uploadedUrls = await Promise.all(
-        selected.map(async (file) => {
-          const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        selected.map(async (rawFile) => {
+          const file = await compressImageIfNeeded(rawFile);
+          if (!ALLOWED_TYPES.includes(file.type)) {
+            throw new Error('Solo se permiten imágenes JPG, PNG o WebP.');
+          }
+          if (file.size > MAX_IMAGE_BYTES) {
+            throw new Error('Una foto sigue superando 2 MB. Intenta con otra más liviana.');
+          }
+
+          const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
           const filePath = `${sellerId}/${crypto.randomUUID()}.${ext}`;
           const { error: uploadError } = await supabase.storage
             .from('product-images')
@@ -137,9 +195,7 @@ export function ProductModal({
 
       setImages((prev) => [...prev, ...uploadedUrls].slice(0, MAX_IMAGES));
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'No se pudo subir la imagen.'
-      );
+      setError(getErrorMessage(err, 'No se pudo subir la imagen.'));
     } finally {
       setUploadingImage(false);
     }
@@ -184,7 +240,8 @@ export function ProductModal({
     try {
       localStorage.setItem(LAST_CAT_KEY, categoryId);
 
-      const payload = {
+      // Solo enviar columnas proxy cuando el Admin publica o edita a nombre de otro vecino
+      const basePayload: Record<string, unknown> = {
         seller_id: editingProduct?.seller_id ?? sellerId,
         category_id: categoryId,
         title: title.trim(),
@@ -193,34 +250,62 @@ export function ProductModal({
         image_url: safeImages[0] ?? null,
         images: safeImages,
         is_available: isAvailable,
-        contact_name:
-          isAdmin && publishOnBehalf ? contactName.trim() : null,
-        contact_whatsapp:
-          isAdmin && publishOnBehalf
-            ? `+${normalizeWhatsApp(contactWhatsapp)}`
-            : null,
-        contact_unit: null,
       };
 
-      if (editingProduct) {
-        const { error: updateError } = await supabase
-          .from('products')
-          .update(payload)
-          .eq('id', editingProduct.id);
-        if (updateError) throw updateError;
-      } else {
+      if (isAdmin && (publishOnBehalf || editingProduct?.contact_whatsapp)) {
+        basePayload.contact_name = publishOnBehalf ? contactName.trim() : null;
+        basePayload.contact_whatsapp = publishOnBehalf
+          ? `+${normalizeWhatsApp(contactWhatsapp)}`
+          : null;
+      }
+
+      const saveOnce = async (payloadToSend: Record<string, unknown>) => {
+        if (editingProduct) {
+          const { error: updateError } = await supabase
+            .from('products')
+            .update(payloadToSend)
+            .eq('id', editingProduct.id);
+          return updateError;
+        }
         const { error: insertError } = await supabase
           .from('products')
-          .insert(payload);
-        if (insertError) throw insertError;
+          .insert(payloadToSend);
+        return insertError;
+      };
+
+      let saveError = await saveOnce(basePayload);
+
+      // Respaldo: si aún no existe alguna columna nueva en el esquema remoto, reintentar solo con columnas base
+      if (
+        saveError &&
+        (saveError.message.includes('schema cache') ||
+          saveError.message.includes('does not exist'))
+      ) {
+        const fallbackPayload = {
+          seller_id: editingProduct?.seller_id ?? sellerId,
+          category_id: categoryId,
+          title: title.trim(),
+          description: description.trim(),
+          price_clp: parsedPrice,
+          image_url: safeImages[0] ?? null,
+          is_available: isAvailable,
+        };
+        saveError = await saveOnce(fallbackPayload);
       }
+
+      if (saveError) throw saveError;
 
       await onSaved();
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'No se pudo guardar el anuncio.'
-      );
+      const msg = getErrorMessage(err, 'No se pudo guardar el anuncio.');
+      if (msg.includes('row-level security')) {
+        setError(
+          'Tu cuenta no tiene permiso para publicar en este momento. Recarga la página o consulta con Administración.'
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -305,14 +390,14 @@ export function ProductModal({
             </div>
           )}
 
-          {/* 1. Fotos primero */}
+          {/* 1. Fotos primero (con compresión automática para celulares) */}
           <div>
             {images.length < MAX_IMAGES && (
               <label className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-2xl border-2 border-dashed border-emerald-400 dark:border-emerald-700 bg-emerald-100/70 dark:bg-slate-800/80 hover:bg-emerald-200/60 dark:hover:bg-slate-800 text-emerald-900 dark:text-emerald-300 text-sm font-bold cursor-pointer transition">
                 <Camera className="w-5 h-5 shrink-0" />
                 <span>
                   {uploadingImage
-                    ? 'Subiendo fotos...'
+                    ? 'Optimizando y subiendo fotos...'
                     : images.length === 0
                       ? 'Agregar fotos (opcional, hasta 6)'
                       : `Agregar más fotos (${images.length}/${MAX_IMAGES})`}
